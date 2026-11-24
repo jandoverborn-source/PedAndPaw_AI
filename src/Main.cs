@@ -1,0 +1,320 @@
+using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using GTA;
+using GtaScreen = GTA.UI.Screen;
+using GtaNotification = GTA.UI.Notification;
+using PedAndPaw_AI.Core;
+
+namespace PedAndPaw_AI
+{
+    /// <summary>
+    /// The mod's entry point. SHVDNE instantiates a Script subclass named Main
+    /// from scripts/PedAndPaw_AI.dll. Tick stays cheap and never awaits:
+    /// replies arrive on a worker thread and are queued back to the game thread.
+    /// </summary>
+    public class Main : Script
+    {
+        private readonly ModConfig _config;
+        private readonly CharacterManager _characters;
+        private readonly RateLimiter _limiter;
+        private readonly IAiProvider _provider;
+        private readonly ConcurrentQueue<Action> _gameThreadQueue = new ConcurrentQueue<Action>();
+        private readonly Keys _interactKey;
+        private readonly Keys _textKey;
+        private readonly Keys _cancelKey;
+
+        private DateTime _lastGunshotUtc = DateTime.MinValue;
+        private int _activePedHandle;
+        private PedState _activeState = PedState.Idle;
+
+        public Main()
+        {
+            var baseDirectory = BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory;
+            Log.Init(baseDirectory);
+
+            var iniPath = Path.Combine(baseDirectory, "PedAndPaw_AI.ini");
+            _config = ModConfig.Load(iniPath);
+            foreach (var warning in _config.Warnings) Log.Warn("Config: " + warning);
+
+            _characters = new CharacterManager(_config, baseDirectory);
+            _limiter = new RateLimiter(_config);
+            _provider = new NullAiProvider();
+
+            _interactKey = ParseKey(_config.InteractKey, Keys.E);
+            _textKey = ParseKey(_config.TextMessageKey, Keys.T);
+            _cancelKey = ParseKey(_config.CancelKey, Keys.Escape);
+
+            Tick += OnTick;
+            KeyDown += OnKeyDown;
+
+            Log.Info("PedAndPaw_AI " + ModBridge.ApiVersion + " loaded. enabled=" + _config.Enabled +
+                     ", roles=" + _characters.Roles.Count +
+                     ", provider=" + _provider.GetType().Name +
+                     ", keys=" + _interactKey + "/" + _textKey + "/" + _cancelKey +
+                     ", ini=" + iniPath);
+        }
+
+        private static Keys ParseKey(string text, Keys fallback)
+        {
+            Keys parsed;
+            if (!string.IsNullOrWhiteSpace(text) && Enum.TryParse(text.Trim(), true, out parsed)) return parsed;
+            Log.Warn("Could not read key '" + text + "', using " + fallback + ".");
+            return fallback;
+        }
+
+        private void OnTick(object sender, EventArgs e)
+        {
+            Action action;
+            while (_gameThreadQueue.TryDequeue(out action))
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Queued game-thread action failed: " + ex.Message);
+                }
+            }
+
+            TrackShots();
+        }
+
+        /// <summary>Remember gunfire when the player or a nearby ped fires.</summary>
+        private void TrackShots()
+        {
+            if (!_config.UseRecentGunshots) return;
+            try
+            {
+                var player = Game.Player.Character;
+                if (player != null && player.IsShooting)
+                {
+                    _lastGunshotUtc = DateTime.UtcNow;
+                    return;
+                }
+
+                var peds = World.GetNearbyPeds(player, 60f, null);
+                if (peds == null) return;
+                foreach (var ped in peds)
+                {
+                    if (ped != null && ped.Exists() && ped.IsShooting)
+                    {
+                        _lastGunshotUtc = DateTime.UtcNow;
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Shot tracking failed: " + ex.Message);
+            }
+        }
+
+        private void OnKeyDown(object sender, KeyEventArgs e)
+        {
+            if (!_config.Enabled) return;
+
+            if (e.KeyCode == _interactKey) StartConversation(false);
+            else if (e.KeyCode == _textKey) StartConversation(true);
+            else if (e.KeyCode == _cancelKey) Dismiss();
+        }
+
+        private void StartConversation(bool asTextMessage)
+        {
+            var player = Game.Player.Character;
+            if (player == null) return;
+
+            var ped = FindNearestPed(player);
+            if (ped == null)
+            {
+                GtaScreen.ShowSubtitle("Nobody close enough to talk to.", 2000);
+                return;
+            }
+
+            if (!asTextMessage && _activePedHandle == ped.Handle)
+            {
+                Dismiss();
+                return;
+            }
+
+            if (asTextMessage && !ped.IsHuman)
+            {
+                GtaScreen.ShowSubtitle("You cannot send a text message to an animal.", 2000);
+                return;
+            }
+
+            BeginTalking(ped);
+        }
+
+        private Ped FindNearestPed(Ped player)
+        {
+            Ped best = null;
+            var bestDistance = float.MaxValue;
+
+            var peds = World.GetNearbyPeds(player, Math.Max(1f, _config.InteractionRange), null);
+            if (peds == null) return null;
+
+            foreach (var ped in peds)
+            {
+                if (ped == null || !ped.Exists() || !ped.IsAlive) continue;
+                if (ped.Handle == player.Handle) continue;
+
+                var isAnimal = !ped.IsHuman;
+                if (isAnimal && !_config.TalkToAnimals) continue;
+                if (!isAnimal && !_config.TalkToCivilians) continue;
+
+                var distance = player.Position.DistanceTo(ped.Position);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = ped;
+                }
+            }
+
+            return best;
+        }
+
+        private void BeginTalking(Ped ped)
+        {
+            string roleLayer;
+            var role = _characters.PickRole(ped, out roleLayer);
+            if (role == null)
+            {
+                GtaScreen.ShowSubtitle("No role file loaded; check scripts/PedAndPaw_AI/roles.", 4000);
+                return;
+            }
+
+            var mode = _characters.EnsureMode(ped);
+            var npcKey = (ped.IsHuman ? "human-" : "animal-") + ped.Handle;
+
+            if (!_limiter.TryAcquire(npcKey, DateTime.UtcNow))
+            {
+                GtaScreen.ShowSubtitle("(" + role.DisplayName + " needs a moment: " + _limiter.LastDenyReason + ")", 2500);
+                return;
+            }
+
+            _characters.FacePlayer(ped, Game.Player.Character);
+            _activePedHandle = ped.Handle;
+            SetState(ped, PedState.AwaitingPlayer);
+            ModBridge.RaiseDialogueStarted(ped, roleLayer);
+            Log.Info("Dialogue started with ped " + ped.Handle + " as " + roleLayer + " (" + mode + ")");
+
+            string input;
+            try
+            {
+                input = Game.GetUserInput("");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GetUserInput failed: " + ex.Message);
+                SetState(ped, PedState.Idle);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                SetState(ped, PedState.Idle);
+                return;
+            }
+
+            var context = ContextScanner.Scan(ped, _config, role, mode, _lastGunshotUtc, DateTime.UtcNow);
+            context = context ?? new NpcContext { RoleLayer = role.DisplayName, ModeName = mode };
+
+            var request = new AiRequest
+            {
+                SystemPrompt = PromptBuilder.BuildSystemPrompt(role, _config, mode),
+                UserMessage = PromptBuilder.BuildUserMessage(context, input, _config, role),
+                MaxTokens = _config.MaxTokensPerReply,
+                Temperature = _config.Temperature,
+                NpcKey = npcKey
+            };
+
+            SetState(ped, PedState.QueryingAI);
+            RequestReply(ped, role, request);
+        }
+
+        /// <summary>Run the provider off the game thread and queue the result back.</summary>
+        private void RequestReply(Ped ped, RoleDefinition role, AiRequest request)
+        {
+            var cancellation = new CancellationTokenSource();
+            Task.Run(async () =>
+            {
+                string reply = null;
+                try
+                {
+                    reply = await _provider.GetReplyAsync(request, cancellation.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Provider failed: " + ex.GetType().Name + ": " + ex.Message);
+                }
+
+                var capturedPed = ped;
+                var capturedRole = role;
+                _gameThreadQueue.Enqueue(() => ShowReply(capturedPed, capturedRole, reply));
+            });
+        }
+
+        private void ShowReply(Ped ped, RoleDefinition role, string reply)
+        {
+            if (string.IsNullOrWhiteSpace(reply))
+            {
+                GtaScreen.ShowSubtitle("(" + role.DisplayName + " did not answer)", 2000);
+                SetState(ped, PedState.Idle);
+                return;
+            }
+
+            var text = reply.Trim();
+            if (_config.MaxReplyCharacters > 0 && text.Length > _config.MaxReplyCharacters)
+                text = text.Substring(0, _config.MaxReplyCharacters).TrimEnd() + "...";
+
+            GtaScreen.ShowSubtitle(text, 6000);
+            if (_config.ShowNotifications) GtaNotification.PostTicker(text, false, true);
+
+            ModBridge.RaiseAiResponseReceived(ped, text);
+            SetState(ped, PedState.Speaking);
+            SetState(ped, PedState.Idle);
+        }
+
+        private void Dismiss()
+        {
+            if (_activePedHandle == 0) return;
+
+            Ped active = null;
+            var peds = World.GetNearbyPeds(Game.Player.Character, 20f, null);
+            if (peds != null)
+            {
+                foreach (var ped in peds)
+                {
+                    if (ped != null && ped.Exists() && ped.Handle == _activePedHandle)
+                    {
+                        active = ped;
+                        break;
+                    }
+                }
+            }
+
+            if (active != null) SetState(active, PedState.Idle);
+            _activeState = PedState.Idle;
+            _activePedHandle = 0;
+            GtaScreen.ShowSubtitle("Conversation ended.", 1500);
+        }
+
+        private void SetState(Ped ped, PedState newState)
+        {
+            var oldState = _activeState;
+            _activeState = newState;
+
+            if (ped == null || !ped.Exists()) return;
+            ModBridge.RaisePedStateChanged(ped, oldState, newState);
+        }
+    }
+}

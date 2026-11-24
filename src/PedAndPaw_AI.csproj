@@ -32,6 +32,9 @@
       <HintPath>$(SHVDNE_DIR)/ScriptHookVDotNet3.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
+    <!-- Windows Forms types (Keys enum) needed for key mapping in Main.cs -->
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
   <ItemGroup>
