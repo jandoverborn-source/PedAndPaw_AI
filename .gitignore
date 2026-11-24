@@ -6,6 +6,10 @@ obj/
 # Build output: produced from src/ by dotnet build; releases attach the DLL instead
 scripts/*.dll
 scripts/*.pdb
+# Local API key: never committed, see docs/TESTING.md
+scripts/PedAndPaw_AI.key
+*.key
+
 # Python cache from tools/
 __pycache__/
 *.pyc

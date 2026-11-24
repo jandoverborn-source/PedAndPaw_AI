@@ -18,14 +18,25 @@ public sealed class OpenAiCompatibleClient : IAiProvider, IDisposable
     private readonly ModConfig _config;
     private readonly string? _apiKey;
 
-    public OpenAiCompatibleClient(ModConfig config)
+    /// <param name="apiKeyOverride">
+    /// Key read from a local file. Used only when the environment variable is empty,
+    /// because Proton does not always pass the launcher's environment to the game.
+    /// </param>
+    public OpenAiCompatibleClient(ModConfig config, string? apiKeyOverride = null)
     {
         _config = config;
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(Math.Max(5, config.RequestTimeoutSeconds)) };
-        _apiKey = string.IsNullOrWhiteSpace(config.ApiKeyEnvVar)
+
+        var environmentKey = string.IsNullOrWhiteSpace(config.ApiKeyEnvVar)
             ? null
             : Environment.GetEnvironmentVariable(config.ApiKeyEnvVar);
+
+        _apiKey = string.IsNullOrWhiteSpace(apiKeyOverride) ? environmentKey : apiKeyOverride;
+        UsedLocalKeyFile = !string.IsNullOrWhiteSpace(apiKeyOverride) && string.IsNullOrWhiteSpace(environmentKey);
     }
+
+    /// <summary>True when the key came from the local file rather than the environment.</summary>
+    public bool UsedLocalKeyFile { get; }
 
     /// <summary>Why the last call failed, for the in-game log.</summary>
     public string? LastError { get; private set; }
@@ -130,7 +141,7 @@ internal static class Json
     /// </summary>
     public static string? TryReadString(string? document, string propertyName)
     {
-        if (string.IsNullOrEmpty(document)) return null;
+        if (document is null || document.Length == 0) return null;
 
         var needle = "\"" + propertyName + "\"";
         var at = document.IndexOf(needle, StringComparison.Ordinal);
@@ -180,8 +191,8 @@ internal static class Json
 
     public static string Shorten(string? value)
     {
-        if (string.IsNullOrEmpty(value)) return "";
-        var single = value!.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        if (value is null || value.Length == 0) return "";
+        var single = value.Replace('\n', ' ').Replace('\r', ' ').Trim();
         return single.Length <= 160 ? single : single.Substring(0, 160) + "...";
     }
 }

@@ -101,4 +101,15 @@ With Steam on Linux, add it to the game's launch options:
 PEDANDPAW_AI_KEY=your_key %command%
 ```
 
-Never put the key in the ini, in a role file, or anywhere in this repository.
+If Proton does not pass the variable through (it often does not), put the key on the
+first line of a file named `PedAndPaw_AI.key` next to the ini, in the game's
+`scripts` folder:
+
+```bash
+printf '%s\n' 'your_key' > "<game>/scripts/PedAndPaw_AI.key"
+chmod 600 "<game>/scripts/PedAndPaw_AI.key"
+```
+
+The mod tries the environment variable first, then that file, and logs which one it
+used. Never put the key in the ini, in a role file, or anywhere in this repository;
+`*.key` is git-ignored.

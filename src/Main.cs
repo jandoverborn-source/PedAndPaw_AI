@@ -47,7 +47,7 @@ namespace PedAndPaw_AI
 
             _characters = new CharacterManager(_config, baseDirectory);
             _limiter = new RateLimiter(_config);
-            _provider = CreateProvider(_config);
+            _provider = CreateProvider(_config, baseDirectory);
 
             _interactKey = ParseKey(_config.InteractKey, Keys.E);
             _textKey = ParseKey(_config.TextMessageKey, Keys.T);
@@ -67,20 +67,55 @@ namespace PedAndPaw_AI
         /// Use the real client when a key is available (or the provider needs none),
         /// otherwise stay on the placeholder so the game never fails without a key.
         /// </summary>
-        private static IAiProvider CreateProvider(ModConfig config)
+        private static IAiProvider CreateProvider(ModConfig config, string baseDirectory)
         {
-            var client = new OpenAiCompatibleClient(config);
-            if (client.HasCredentials)
+            var fromEnvironment = new OpenAiCompatibleClient(config);
+            if (fromEnvironment.HasCredentials)
             {
                 Log.Info("AI provider: " + config.Provider + " / " + config.Model + " via " + config.BaseUrl +
-                         " (key from " + config.ApiKeyEnvVar + ")");
-                return client;
+                         " (key from the environment variable " + config.ApiKeyEnvVar + ")");
+                return fromEnvironment;
+            }
+            fromEnvironment.Dispose();
+
+            // Proton does not always hand the launcher's environment to the game, so a
+            // local key file next to the ini is the reliable route. It is never committed.
+            var keyPath = Path.Combine(baseDirectory, "PedAndPaw_AI.key");
+            var fileKey = ReadKeyFile(keyPath);
+            if (!string.IsNullOrWhiteSpace(fileKey))
+            {
+                var fromFile = new OpenAiCompatibleClient(config, fileKey);
+                Log.Info("AI provider: " + config.Provider + " / " + config.Model + " via " + config.BaseUrl +
+                         " (key from the local file " + keyPath + ")");
+                return fromFile;
             }
 
-            Log.Warn("No key in the environment variable '" + config.ApiKeyEnvVar + "' and provider '" +
-                     config.Provider + "' is not ollama; using the placeholder provider.");
-            client.Dispose();
+            Log.Warn("No API key found. Looked in the environment variable '" + config.ApiKeyEnvVar +
+                     "' and in '" + keyPath + "'. Provider '" + config.Provider +
+                     "' is not ollama, so the placeholder provider is used.");
             return new NullAiProvider();
+        }
+
+        /// <summary>First non-empty line of the file, or null. The file is optional.</summary>
+        private static string ReadKeyFile(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return null;
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.Length == 0) continue;
+                    if (trimmed.StartsWith("#", StringComparison.Ordinal)) continue;
+                    return trimmed;
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Could not read the key file " + path + ": " + ex.Message);
+                return null;
+            }
         }
 
         private static Keys ParseKey(string text, Keys fallback)
