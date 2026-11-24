@@ -115,7 +115,13 @@ public sealed class OpenAiCompatibleClient : IAiProvider, IDisposable
     private string? ReadReply(string responseBody)
     {
         var text = Json.TryReadString(responseBody, "content");
-        if (!string.IsNullOrWhiteSpace(text)) return text!.Trim();
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            // A reply this short is usually a truncated or throttled response, not dialogue.
+            if (text!.Trim().Length < 6)
+                LastError = "suspiciously short reply, raw body: " + Json.Shorten(responseBody);
+            return text.Trim();
+        }
 
         var reasoning = Json.TryReadString(responseBody, "reasoning")
                      ?? Json.TryReadString(responseBody, "reasoning_content");
