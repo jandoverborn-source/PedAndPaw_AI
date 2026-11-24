@@ -6,9 +6,7 @@ This document describes how external ScriptHookVDotNet Enhanced (SHVDNE) scripts
 
 ## Overview
 
-PedAndPaw_AI exposes a **static event bus** called `PluginBus` (namespace `PedAndPaw_AI`). Other SHVDNE scripts can register handlers for three core events. The exact API signatures are **fixed when ModBridge.cs is implemented** — this stub documents the event *names*, *payloads*, and *semantics* so you can plan your integration.
-
-> **Do not implement against this stub.** Wait for ModBridge.cs to publish the real event bus with verified delegate types.
+PedAndPaw_AI exposes a **static event bus** called `ModBridge` (namespace `PedAndPaw_AI`). Other SHVDNE scripts can register handlers for three core events. The API version is currently `0.3.0`.
 
 ---
 
@@ -18,12 +16,12 @@ PedAndPaw_AI exposes a **static event bus** called `PluginBus` (namespace `PedAn
 
 Fired when the player opens a dialogue with a pedestrian or animal.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `Ped` | `GTA.Ped` | The ped the player is talking to. |
-| `RoleLayer` | `string` | The role layer name from the ped's profile (e.g., `"Police"`, `"Stray Dog"`). |
+**Signature:** `void DialogueStartedHandler(Ped ped, string roleLayer)`
 
-**Use case:** Log interactions, trigger custom UI, suppress other mod behavior during dialogue.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ped` | `GTA.Ped` | The ped the player is talking to. |
+| `roleLayer` | `string` | The role layer name from the ped's profile (e.g., `"Police"`, `"Stray Dog"`). |
 
 ---
 
@@ -31,12 +29,12 @@ Fired when the player opens a dialogue with a pedestrian or animal.
 
 Fired after the AI provider returns a response for the current dialogue turn.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `Ped` | `GTA.Ped` | The ped that generated the response. |
-| `Response` | `string` | The AI-generated reply text (before any post-processing). |
+**Signature:** `void AiResponseReceivedHandler(Ped ped, string response)`
 
-**Use case:** Log conversations, feed responses to a TTS mod, analyze sentiment, trigger animations.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ped` | `GTA.Ped` | The ped that generated the response. |
+| `response` | `string` | The AI-generated reply text. |
 
 ---
 
@@ -44,25 +42,25 @@ Fired after the AI provider returns a response for the current dialogue turn.
 
 Fired when a ped's internal dialogue state transitions.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `Ped` | `GTA.Ped` | The ped whose state changed. |
-| `OldState` | `PedState` | Previous state (enum, defined when ModBridge.cs is implemented). |
-| `NewState` | `PedState` | New state (enum, defined when ModBridge.cs is implemented). |
+**Signature:** `void PedStateChangedHandler(Ped ped, PedState oldState, PedState newState)`
 
-**Typical `PedState` values (subject to step-2 finalization):**
-- `Idle` — not in dialogue
-- `AwaitingPlayer` — dialogue open, waiting for player input
-- `QueryingAI` — request sent to LLM, waiting for response
-- `Speaking` — AI response received, displaying to player
-- `Fleeing` — ped is fleeing (weapon reaction)
-- `Aggressive` — ped is attacking (weapon reaction)
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ped` | `GTA.Ped` | The ped whose state changed. |
+| `oldState` | `PedState` | The state before the change. |
+| `newState` | `PedState` | The current state. |
 
-**Use case:** Sync other mod state (e.g., disable wanted level during dialogue, trigger custom animations per state).
+**`PedState` Values:**
+- `Idle` (0) — not in dialogue
+- `AwaitingPlayer` (1) — dialogue open, waiting for player input
+- `QueryingAI` (2) — request sent to LLM, waiting for response
+- `Speaking` (3) — AI response received, displaying to player
+- `Fleeing` (4) — ped is fleeing (weapon reaction)
+- `Aggressive` (5) — ped is attacking (weapon reaction)
 
 ---
 
-## How to Subscribe (API Preview)
+## How to Subscribe
 
 ```csharp
 using PedAndPaw_AI;
@@ -72,10 +70,10 @@ public class MyPlugin : Script
 {
     public MyPlugin()
     {
-        // Subscribe once on script init
-        PluginBus.OnDialogueStarted += OnDialogueStarted;
-        PluginBus.OnAiResponseReceived += OnAiResponseReceived;
-        PluginBus.OnPedStateChanged += OnPedStateChanged;
+        // Subscribe to events. PedAndPaw_AI handles subscriber exceptions internally.
+        ModBridge.OnDialogueStarted += OnDialogueStarted;
+        ModBridge.OnAiResponseReceived += OnAiResponseReceived;
+        ModBridge.OnPedStateChanged += OnPedStateChanged;
     }
 
     private void OnDialogueStarted(Ped ped, string roleLayer)
@@ -95,29 +93,17 @@ public class MyPlugin : Script
 }
 ```
 
-> **The delegate types, event names, and `PedState` enum are finalized when ModBridge.cs is implemented.** The above is illustrative only.
-
 ---
 
-## Loading Order
+## Integration Notes
 
-- PedAndPaw_AI must load **before** your plugin script.
-- Make sure your plugin's `Script` constructor runs after the PedAndPaw_AI event bus is initialized. SHVDNE's script load order has not been verified for this project yet; check SHVDNE's own documentation before relying on it, and treat a missing bus as a normal case your plugin must tolerate.
-
----
-
-## Versioning & Compatibility
-
-- Event signatures are **semantic-versioned**. Breaking changes increment the major version.
-- Check the release notes of the PedAndPaw_AI version you built against. This stub promises no runtime version property.
+- **API Version:** The `ModBridge.ApiVersion` constant (currently `"0.3.0"`) is bumped on any signature change.
+- **Loading Order:** Your plugin must tolerate the event bus being empty or uninitialized if loaded before PedAndPaw_AI.
+- **Safety:** PedAndPaw_AI wraps event invocations in a try-catch block; a throwing subscriber will be logged as a warning and will not crash the main mod.
 
 ---
 
 ## See Also
 
-- **docs/PROFILES.md** — how role layers (passed in `OnDialogueStarted`) are defined.
-- **README.md** — installation, configuration, building from source.
-
----
-
-*Plugin API finalized when ModBridge.cs is implemented. This stub exists for planning purposes only.*
+- **docs/PROFILES.md** — how role layers are defined.
+- **README.md** — installation, configuration, and building from source.

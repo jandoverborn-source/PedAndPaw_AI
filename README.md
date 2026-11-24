@@ -112,33 +112,39 @@ See **docs/PROFILES.md** for the exact file format, role layers, modes, and weap
 
 ## 8. Building from Source
 
+The project consists of a Core library and the main SHVDNE script.
+
+### Building the Project
+
 ```bash
-# Needs the .NET SDK on Windows with the .NET Framework 4.8 targeting pack;
-# the bundled CI workflow does exactly this on a windows-latest runner.
-dotnet build src/PedAndPaw_AI.csproj -c Release
+dotnet build src/PedAndPaw_AI.csproj -c Release -p:SHVDNE_DIR=/path/to/shvdne
 ```
 
-The project outputs the DLL straight into the shipped folder:
+The output DLLs are placed in `scripts/`:
+- `scripts/PedAndPaw_AI.dll` (main mod)
+- `scripts/PedAndPaw_AI.Core.dll` (core library)
 
-```
-scripts/PedAndPaw_AI.dll
-```
+### Running Tests
 
-Copy the `scripts/` folder into your GTA V root directory (or use the release ZIP, which already has it in place).
+The Core logic checks can be executed without launching the game:
+
+```bash
+dotnet run --project tests/CoreChecks
+```
 
 ---
 
 ## 9. Plugins (For Modders)
 
-Other SHVDNE scripts can subscribe to PedAndPaw_AI events. See **docs/PLUGINS.md** for details.
+Other SHVDNE scripts can subscribe to PedAndPaw_AI events. The real API surface is defined in `src/ModBridge.cs` and documented in `docs/PLUGINS.md`.
 
-| Event | Description |
-|-------|-------------|
-| `OnDialogueStarted` | Fired when the player opens dialogue with a ped: which ped and which role layer. |
-| `OnAiResponseReceived` | Fired after the AI generates a reply, with the reply text. |
-| `OnPedStateChanged` | Fired when a ped's internal dialogue state changes (idle, talking, fleeing, and so on). |
+| Event | Signature | Description |
+|-------|-----------|-------------|
+| `OnDialogueStarted` | `ModBridge.OnDialogueStarted += ...` <br> `DialogueStartedHandler(Ped ped, string roleLayer)` | Fired when the player opens dialogue with a ped. |
+| `OnAiResponseReceived` | `ModBridge.OnAiResponseReceived += ...` <br> `AiResponseReceivedHandler(Ped ped, string response)` | Fired after the AI generates a reply. |
+| `OnPedStateChanged` | `ModBridge.OnPedStateChanged += ...` <br> `PedStateChangedHandler(Ped ped, PedState oldState, PedState newState)` | Fired when a ped's internal dialogue state changes. |
 
-Exact delegate signatures and the event-bus shape are fixed when `ModBridge.cs` is written; do not code against a guessed signature.
+The event bus handles subscriber exceptions internally; a throwing subscriber is logged as a warning and will not crash the mod. Your plugin must tolerate the bus being empty if loaded before PedAndPaw_AI. The `ApiVersion` constant (`"0.3.0"`) is bumped on any signature change.
 
 ---
 

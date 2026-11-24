@@ -133,13 +133,12 @@ It will report pass/fail for each `.txt` file and line numbers for errors.
 
 ## 13. CharacterManager.cs – Runtime Behavior
 
-- Loads all files in `scripts/PedAndPaw_AI/roles/` recursively.
-- Parses according to the grammar above.
-- On parse error, logs e.g.:
-```
-[ERROR] PedAndPaw_AI: Role file 'scripts/PedAndPaw_AI/roles/animals/bad_dog.txt' has parse error: unknown label 'Wesrpe' in WEAPON REACTIONS section. Loading aborted.
-```
-- Successfully parsed files provide their prose, modes, and weapon reactions to the AI prompt.
+- **Recursive Loading:** All `*.txt` files under the `RolesFolder` (default `scripts/PedAndPaw_AI/roles`) are loaded recursively. It attempts to find the folder relative to the `scripts` folder or the game root.
+- **Error Handling:** If a file fails to parse, it is rejected and a warning is logged: `Role file rejected: <error_message>`.
+- **Mode Switching:** When `DynamicModeSwitching` is enabled in `PedAndPaw_AI.ini`, NPCs switch modes based on weapon events:
+  - **Scared:** Triggered by aiming at the NPC or recent gunshots nearby.
+  - **Grumpy:** Triggered by the player drawing a weapon.
+- **Persistence:** Role and mode assignments are deterministic based on the NPC's handle, ensuring consistent personalities during a session.
 
 ---
 
