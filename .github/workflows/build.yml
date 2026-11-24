@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Pinned release, verified on 2025-11-24: the asset contains ScriptHookVDotNet3.dll
+      # at the archive root. Never use "latest" here; bump the tag deliberately.
+      - name: Download pinned SHVDNE release
+        shell: pwsh
+        run: |
+          $tag = "v1.1.0.6"
+          $asset = "ScriptHookVDotNetEnhanced-$tag.zip"
+          $url = "https://github.com/Chiheb-Bacha/ScriptHookVDotNetEnhanced/releases/download/$tag/$asset"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile shvdne.zip -UseBasicParsing
+          Write-Host "Archive bytes: $((Get-Item shvdne.zip).Length)"
+
+      - name: Extract SHVDNE API assembly
+        shell: pwsh
+        run: |
+          Expand-Archive -Path shvdne.zip -DestinationPath shvdne -Force
+          if (-not (Test-Path shvdne/ScriptHookVDotNet3.dll)) {
+            throw "ScriptHookVDotNet3.dll not found at the archive root"
+          }
+          Write-Host "Found shvdne/ScriptHookVDotNet3.dll"
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $shvdne = (Resolve-Path shvdne).Path
+          dotnet build src/PedAndPaw_AI.csproj -c Release -p:SHVDNE_DIR="$shvdne"
+
+      - name: Assert the shipped DLL exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path scripts/PedAndPaw_AI.dll)) {
+            throw "Build did not produce scripts/PedAndPaw_AI.dll"
+          }
+          Write-Host "Built: scripts/PedAndPaw_AI.dll ($((Get-Item scripts/PedAndPaw_AI.dll).Length) bytes)"

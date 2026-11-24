@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>PedAndPaw_AI</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <!-- The built DLL is shipped to users from scripts/ at the repository root. -->
+    <OutputPath>$(MSBuildThisFileDirectory)../scripts/</OutputPath>
+    <!-- Keep the DLL directly in scripts/, not in a net48/ subfolder. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Folder holding the SHVDNE managed API assembly (ScriptHookVDotNet3.dll).
+         CI passes it in with -p:SHVDNE_DIR=...; for a local build, put the DLL
+         from the SHVDNE release zip into shvdne/ next to src/. -->
+    <SHVDNE_DIR Condition="'$(SHVDNE_DIR)' == ''">$(MSBuildThisFileDirectory)../shvdne</SHVDNE_DIR>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SHVDNE v1.1.0.6 managed API, .NET Framework 4.8.
+         Verify every member against Docs/ScriptHookVDotNet3.xml from the release; never guess. -->
+    <Reference Include="ScriptHookVDotNet3">
+      <HintPath>$(SHVDNE_DIR)/ScriptHookVDotNet3.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Supplies the net48 reference assemblies when the Windows targeting pack is absent. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

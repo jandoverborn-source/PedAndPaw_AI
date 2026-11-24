@@ -3,4 +3,7 @@ obj/
 *.user
 .vs/
 *.zip
+# Build output: produced from src/ by dotnet build; releases attach the DLL instead
+scripts/*.dll
+scripts/*.pdb
 # Do NOT ignore scripts/ as it contains assets and configurations shipped to users
