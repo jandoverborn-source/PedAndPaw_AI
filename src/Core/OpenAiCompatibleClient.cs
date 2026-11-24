@@ -50,43 +50,51 @@ public sealed class OpenAiCompatibleClient : IAiProvider, IDisposable
     {
         LastError = null;
 
+        var url = _config.BaseUrl.TrimEnd('/') + "/chat/completions";
+        var body = "{" +
+                   "\"model\":" + Json.Quote(_config.Model) + "," +
+                   "\"messages\":[" +
+                   "{\"role\":\"system\",\"content\":" + Json.Quote(request.SystemPrompt) + "}," +
+                   "{\"role\":\"user\",\"content\":" + Json.Quote(request.UserMessage) + "}]," +
+                   "\"max_tokens\":" + Math.Max(16, request.MaxTokens) + "," +
+                   "\"temperature\":" + request.Temperature.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) +
+                   "}";
+
         try
         {
-            var url = _config.BaseUrl.TrimEnd('/') + "/chat/completions";
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
-
-            if (!string.IsNullOrWhiteSpace(_apiKey))
-                httpRequest.Headers.Add("Authorization", "Bearer " + _apiKey);
-
-            var body = "{" +
-                       "\"model\":" + Json.Quote(_config.Model) + "," +
-                       "\"messages\":[" +
-                       "{\"role\":\"system\",\"content\":" + Json.Quote(request.SystemPrompt) + "}," +
-                       "{\"role\":\"user\",\"content\":" + Json.Quote(request.UserMessage) + "}]," +
-                       "\"max_tokens\":" + Math.Max(16, request.MaxTokens) + "," +
-                       "\"temperature\":" + request.Temperature.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) +
-                       "}";
-
-            httpRequest.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _http.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-            var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
+            for (var attempt = 1; attempt <= 2; attempt++)
             {
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
+                if (!string.IsNullOrWhiteSpace(_apiKey))
+                    httpRequest.Headers.Add("Authorization", "Bearer " + _apiKey);
+                httpRequest.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+                using var response = await _http.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                if (response.IsSuccessStatusCode)
+                    return ReadReply(responseBody);
+
+                var status = (int)response.StatusCode;
                 var detail = Json.TryReadString(responseBody, "message");
-                LastError = "HTTP " + (int)response.StatusCode + (detail != null ? ": " + Json.Shorten(detail) : "");
+                LastError = "HTTP " + status + (detail != null ? ": " + Json.Shorten(detail) : "");
+
+                // 429 (quota) and 503 (overloaded) are worth one quick retry.
+                if (status == 429 || status == 503)
+                {
+                    if (attempt == 1)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(1200), cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    LastError += " (after 2 attempts)";
+                }
+
                 return null;
             }
 
-            var text = Json.TryReadString(responseBody, "content");
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                LastError = "empty reply: " + Json.Shorten(responseBody);
-                return null;
-            }
-
-            return text!.Trim();
+            return null;
         }
         catch (OperationCanceledException)
         {
@@ -98,6 +106,39 @@ public sealed class OpenAiCompatibleClient : IAiProvider, IDisposable
             LastError = ex.GetType().Name + ": " + ex.Message;
             return null;
         }
+    }
+
+    /// <summary>
+    /// Pull the answer out of a chat completions body. Reasoning models return an
+    /// empty content field and put the text in "reasoning", so that is the fallback.
+    /// </summary>
+    private string? ReadReply(string responseBody)
+    {
+        var text = Json.TryReadString(responseBody, "content");
+        if (!string.IsNullOrWhiteSpace(text)) return text!.Trim();
+
+        var reasoning = Json.TryReadString(responseBody, "reasoning")
+                     ?? Json.TryReadString(responseBody, "reasoning_content");
+        if (!string.IsNullOrWhiteSpace(reasoning))
+        {
+            LastError = "model returned reasoning only; used its last paragraph";
+            return LastParagraph(reasoning!).Trim();
+        }
+
+        LastError = "empty reply: " + Json.Shorten(responseBody);
+        return null;
+    }
+
+    /// <summary>Last non-empty paragraph of a reasoning block: the answer usually ends it.</summary>
+    private static string LastParagraph(string reasoning)
+    {
+        var parts = reasoning.Replace("\r", "").Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        for (var i = parts.Length - 1; i >= 0; i--)
+        {
+            var candidate = parts[i].Trim().Trim('*', '-', ' ');
+            if (candidate.Length >= 2) return candidate;
+        }
+        return reasoning.Trim();
     }
 
     public void Dispose() => _http.Dispose();

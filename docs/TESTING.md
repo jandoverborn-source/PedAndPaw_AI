@@ -113,3 +113,25 @@ chmod 600 "<game>/scripts/PedAndPaw_AI.key"
 The mod tries the environment variable first, then that file, and logs which one it
 used. Never put the key in the ini, in a role file, or anywhere in this repository;
 `*.key` is git-ignored.
+
+## Provider notes learned in game
+
+- **Gemini free tier answers HTTP 429** ("You exceeded your current quota") once the
+  daily quota is spent. The client retries 429/503 once, then logs the reason and the
+  NPC stays silent; the in-game subtitle says it did not answer.
+- **Local Ollama is the reliable way to exercise the loop** and costs nothing:
+
+  ```ini
+  [Ai]
+  Provider = ollama
+  BaseUrl = http://localhost:11434/v1
+  Model = llama3.2:3b
+  ```
+
+- **Reasoning models do not work through Ollama's OpenAI endpoint.** `gemma4:12b` and
+  `qwen3.5:9b` return an empty `content` field and put everything in `reasoning`;
+  the client falls back to the last paragraph of that, which is meta text such as
+  "Tone: Tough, impatient". Use `llama3.2:3b` or `ornith-1.5-9b` for local tests, or
+  a provider that returns normal content.
+- The live check accepts overrides:
+  `PEDANDPAW_LIVE_PROVIDER=ollama PEDANDPAW_LIVE_BASEURL=http://localhost:11434/v1 PEDANDPAW_LIVE_MODEL=llama3.2:3b dotnet run --project tests/CoreChecks -- --live`

@@ -201,13 +201,15 @@ Check("daily budget", () =>
 // Optional live call against a real provider: dotnet run --project tests/CoreChecks -- --live
 if (args.Contains("--live"))
 {
+    // Overridable so the same check can point at Ollama or another provider:
+    //   PEDANDPAW_LIVE_BASEURL=http://localhost:11434/v1 PEDANDPAW_LIVE_MODEL=llama3.2:3b
     var liveConfig = new ModConfig
     {
-        Provider = "gemini",
-        BaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/",
-        Model = "gemini-3-flash-preview",
+        Provider = Environment.GetEnvironmentVariable("PEDANDPAW_LIVE_PROVIDER") ?? "gemini",
+        BaseUrl = Environment.GetEnvironmentVariable("PEDANDPAW_LIVE_BASEURL") ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
+        Model = Environment.GetEnvironmentVariable("PEDANDPAW_LIVE_MODEL") ?? "gemini-3-flash-preview",
         ApiKeyEnvVar = "PEDANDPAW_AI_KEY",
-        RequestTimeoutSeconds = 60
+        RequestTimeoutSeconds = 90
     };
 
     using var client = new OpenAiCompatibleClient(liveConfig);
