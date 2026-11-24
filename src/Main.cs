@@ -220,7 +220,11 @@ namespace PedAndPaw_AI
                 return;
             }
 
-            var mode = _characters.EnsureMode(ped);
+            var playerNow = Game.Player.Character;
+            var weaponDrawn = playerNow != null && playerNow.Weapons.Current.Hash != WeaponHash.Unarmed;
+            var aiming = Game.Player.IsAiming;
+            var shotsFresh = (DateTime.UtcNow - _lastGunshotUtc).TotalSeconds <= _config.GunshotMemorySeconds;
+            var mode = _characters.ReactToWeaponState(ped, weaponDrawn, aiming, shotsFresh);
             var npcKey = (ped.IsHuman ? "human-" : "animal-") + ped.Handle;
 
             if (!_limiter.TryAcquire(npcKey, DateTime.UtcNow))
@@ -249,9 +253,13 @@ namespace PedAndPaw_AI
 
             if (string.IsNullOrWhiteSpace(input))
             {
+                Log.Info("Input cancelled or empty for ped " + ped.Handle);
+                GtaScreen.ShowSubtitle("(" + role.DisplayName + " waits. Nothing was said.)", 2000);
                 SetState(ped, PedState.Idle);
                 return;
             }
+
+            Log.Info("Player said to ped " + ped.Handle + ": " + Shorten(input));
 
             var context = ContextScanner.Scan(ped, _config, role, mode, _lastGunshotUtc, DateTime.UtcNow);
             context = context ?? new NpcContext { RoleLayer = role.DisplayName, ModeName = mode };
@@ -308,12 +316,20 @@ namespace PedAndPaw_AI
             if (_config.MaxReplyCharacters > 0 && text.Length > _config.MaxReplyCharacters)
                 text = text.Substring(0, _config.MaxReplyCharacters).TrimEnd() + "...";
 
+            Log.Info("Reply to ped " + (ped != null ? ped.Handle.ToString() : "?") + " (" + role.DisplayName + "): " + Shorten(text));
             GtaScreen.ShowSubtitle(text, 6000);
             if (_config.ShowNotifications) GtaNotification.PostTicker(text, false, true);
 
             ModBridge.RaiseAiResponseReceived(ped, text);
             SetState(ped, PedState.Speaking);
             SetState(ped, PedState.Idle);
+        }
+
+        private static string Shorten(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            var single = value.Replace("\r", " ").Replace("\n", " ").Trim();
+            return single.Length <= 80 ? single : single.Substring(0, 80) + "...";
         }
 
         private void Dismiss()
