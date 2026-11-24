@@ -67,3 +67,16 @@ Then read the logs in the game's `scripts/` folder:
   hashes).
 - `Game.GetUserInput` blocks the script thread while the text box is open.
 - The AI provider is a placeholder; no network call is made yet.
+
+## SHVDNE gotchas found the hard way
+
+- **Never pass `null` as the model filter.** `World.GetNearbyPeds(ped, radius, null)` and
+  `World.GetAllPeds(null)` throw `ArgumentNullException: Parameter name: array`, because
+  SHVDNE runs `Array.ConvertAll` on it without a null check. Pass an empty `Model[]` instead.
+  This crashes inside `Script.DoTick()`, so it kills the tick until the next frame and floods
+  the log; wrap key handlers in `try/catch` as a second line of defence.
+- Three APIs SHVDNE marks obsolete are replaced here: `GTA.Chrono.GameClock` instead of
+  `World.CurrentTimeOfDay`, `Player.Wanted.WantedLevel` instead of `Player.WantedLevel`,
+  and `Notification.PostTicker` instead of `Notification.Show`.
+- `Script.Tick` runs often: throttle periodic scans with `Game.FrameCount % N` and never
+  `await` in it.

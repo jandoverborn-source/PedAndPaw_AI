@@ -27,7 +27,12 @@ namespace PedAndPaw_AI
         private readonly Keys _textKey;
         private readonly Keys _cancelKey;
 
+        // SHVDNE's World.GetNearbyPeds calls Array.ConvertAll on the model filter without a null
+        // check, so null throws ArgumentNullException. An empty array means "any model".
+        private static readonly Model[] NoModelFilter = new Model[0];
+
         private DateTime _lastGunshotUtc = DateTime.MinValue;
+        private DateTime _lastShotWarnUtc = DateTime.MinValue;
         private int _activePedHandle;
         private PedState _activeState = PedState.Idle;
 
@@ -88,6 +93,7 @@ namespace PedAndPaw_AI
         private void TrackShots()
         {
             if (!_config.UseRecentGunshots) return;
+            if (Game.FrameCount % 15 != 0) return;
             try
             {
                 var player = Game.Player.Character;
@@ -97,7 +103,7 @@ namespace PedAndPaw_AI
                     return;
                 }
 
-                var peds = World.GetNearbyPeds(player, 60f, null);
+                var peds = World.GetNearbyPeds(player, 60f, NoModelFilter);
                 if (peds == null) return;
                 foreach (var ped in peds)
                 {
@@ -110,7 +116,11 @@ namespace PedAndPaw_AI
             }
             catch (Exception ex)
             {
-                Log.Warn("Shot tracking failed: " + ex.Message);
+                if ((DateTime.UtcNow - _lastShotWarnUtc).TotalSeconds > 60)
+                {
+                    _lastShotWarnUtc = DateTime.UtcNow;
+                    Log.Warn("Shot tracking failed: " + ex.Message);
+                }
             }
         }
 
@@ -118,9 +128,18 @@ namespace PedAndPaw_AI
         {
             if (!_config.Enabled) return;
 
-            if (e.KeyCode == _interactKey) StartConversation(false);
-            else if (e.KeyCode == _textKey) StartConversation(true);
-            else if (e.KeyCode == _cancelKey) Dismiss();
+            try
+            {
+                if (e.KeyCode == _interactKey) StartConversation(false);
+                else if (e.KeyCode == _textKey) StartConversation(true);
+                else if (e.KeyCode == _cancelKey) Dismiss();
+            }
+            catch (Exception ex)
+            {
+                // A keypress must never kill the script tick.
+                Log.Error("Key handling failed: " + ex.GetType().Name + ": " + ex.Message);
+                GtaScreen.ShowSubtitle("[PedAndPaw_AI] " + ex.GetType().Name + ": " + ex.Message, 3000);
+            }
         }
 
         private void StartConversation(bool asTextMessage)
@@ -155,7 +174,20 @@ namespace PedAndPaw_AI
             Ped best = null;
             var bestDistance = float.MaxValue;
 
-            var peds = World.GetNearbyPeds(player, Math.Max(1f, _config.InteractionRange), null);
+            var radius = Math.Max(1f, _config.InteractionRange);
+            var peds = World.GetNearbyPeds(player, radius, NoModelFilter);
+
+            // Belt and braces: if the native filter returned nothing, fall back to a
+            // distance filter over every ped. Cheap on a keypress and never null.
+            if (peds == null || peds.Length == 0)
+            {
+                var all = World.GetAllPeds(NoModelFilter);
+                if (all == null) return null;
+                peds = Array.FindAll(all, candidate =>
+                    candidate != null && candidate.Exists() &&
+                    player.Position.DistanceTo(candidate.Position) <= radius);
+            }
+
             if (peds == null) return null;
 
             foreach (var ped in peds)
@@ -289,7 +321,7 @@ namespace PedAndPaw_AI
             if (_activePedHandle == 0) return;
 
             Ped active = null;
-            var peds = World.GetNearbyPeds(Game.Player.Character, 20f, null);
+            var peds = World.GetNearbyPeds(Game.Player.Character, 20f, NoModelFilter);
             if (peds != null)
             {
                 foreach (var ped in peds)

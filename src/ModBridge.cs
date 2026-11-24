@@ -89,7 +89,11 @@ namespace PedAndPaw_AI
             var line = "[" + DateTime.Now.ToString("HH:mm:ss") + "] [" + level + "] " + message;
             try
             {
-                if (_path != null) File.AppendAllText(_path, line + Environment.NewLine);
+                if (_path == null) return;
+                var info = new FileInfo(_path);
+                if (info.Exists && info.Length > 1024 * 1024)
+                    File.WriteAllText(_path, "[" + DateTime.Now.ToString("HH:mm:ss") + "] [INFO] Log rotated at 1 MB" + Environment.NewLine);
+                File.AppendAllText(_path, line + Environment.NewLine);
             }
             catch
             {
