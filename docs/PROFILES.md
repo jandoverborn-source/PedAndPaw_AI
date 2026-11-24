@@ -1,163 +1,187 @@
-# Writing Role Profiles (PedAndPaw_AI)
+# Role File Format — Authoritative Specification (PedAndPaw_AI v1)
 
-This document describes how to create custom character profiles for PedAndPaw_AI. The format is intentionally simple: **plain UTF-8 text files**, one per role or animal.
-
----
-
-## File Location
-
-Place your `.txt` files under:
-
-```
-scripts/PedAndPaw_AI/roles/humans/   # e.g., police.txt, gang_member.txt, civilian.txt
-scripts/PedAndPaw_AI/roles/animals/  # e.g., dog.txt, cat.txt, bird.txt, deer.txt
-```
-
-The filename (without extension) becomes the **role key** used internally.
+This document is the **locked, authoritative grammar** for role‑files used by PedAndPaw_AI. It is read‑only and must not be modified until the grammar evolves to a new version.
+All parser tools (tools/validate_roles.py) and the runtime (CharacterManager.cs) follow this specification exactly.
 
 ---
 
-## File Structure
+## 1. File Constraints
 
-A role file has three parts, in this fixed order:
+- **Encoding:** plain UTF‑8, no BOM.
+- **Location:** `scripts/PedAndPaw_AI/roles/humans/` or `scripts/PedAndPaw_AI/roles/animals/`.
+- **Extension:** `.txt`.
+- **Maximum size:** 8 KB.
+- **Name:** The file name without the `.txt` extension is the role key used internally.
+
+---
+
+## 2. First Line – Role Layer Declaration
+
+The very first line **must** match exactly the pattern:
+```
+Role layer, <Display Name>:
+```
+where `<Display Name>`:
+- has 1–40 characters,
+- contains no `:` character.
+
+The display name is the *role layer* string passed to the LLM.
+
+> **Example**: `Role layer, Police:`
+
+If this line is missing or malformed the file is rejected.
+
+---
+
+## 3. Free Prose (Voice)
+
+All content from line 2 up to (but not including) the first section header is free prose.
+- At least one non‑empty line must exist.
+- This prose is the voice sent to the model; it defines personality, tone, and instructions to the AI.
+- Write in present tense, second person (e.g., “You are …”).
+
+---
+
+## 4. Comments
+
+Lines whose first non‑space character is `#` are comments and are ignored. Blank lines are ignored unless they form part of prose.
+
+---
+
+## 5. Section Headers (Exact)
+
+Two section headers **must** appear, in this order, both required:
+1. `=== MODES ===`
+2. `=== WEAPON REACTIONS ===`
+
+- Headers must match exactly, including spaces.
+- No other headers are allowed.
+- Wrong order or spelling causes a parse error.
+
+---
+
+## 6. Section Content – `[Label]` Blocks
+
+Inside each section, blocks begin with a line of the form `[Label]` with no leading/trailing spaces inside the brackets.
+The block body consists of all text up to the next `[Label]`, the next section header, or end of file.
+
+---
+
+## 7. MODES Section – Five Mandatory Labels
+
+The `=== MODES ===` section **must** contain exactly these five labels, each exactly once:
+- `Friendly`
+- `Grumpy`
+- `Scared`
+- `Aggressive`
+- `Philosophical`
+
+Any missing, duplicate, or unknown label results in a parse error.
+The body of each label describes how the character behaves in that mode.
+
+---
+
+## 8. WEAPON REACTIONS Section – Three Mandatory Labels
+
+The `=== WEAPON REACTIONS ===` section **must** contain exactly these three labels, each exactly once:
+- `WeaponDrawn`
+- `WeaponAimed`
+- `WeaponFired`
+
+Any missing, duplicate, or unknown label results in a parse error.
+The body of each label describes the character’s response when a weapon is involved.
+
+---
+
+## 9. Animals’ Special Rule
+
+- Animals are *talkable*.
+- They can never be shot or killed; weapon reactions must describe **fear and flight**, not damage.
+- The three weapon‑reaction labels still apply, but the content must reflect non‑violent escape.
+
+---
+
+## 10. Clean‑Content Guarantee
+
+- Role files must not contain explicit sexual content.
+- The `NudityPercent` setting in `PedAndPaw_AI.ini` governs runtime AI output; the role file itself must remain clean.
+
+---
+
+## 11. Parse Errors
+
+A parse error causes the file to be rejected by `CharacterManager.cs` with a clear log line. Parse errors include:
+- Missing or malformed first line.
+- Content before line 1.
+- Missing or mis‑typed section header.
+- Wrong header order.
+- Missing, duplicate, or unknown labels.
+- No prose before the first section header.
+- File size > 8 KB.
+
+---
+
+## 12. Validation Command
+
+Run the built‑in validator:
+```
+python3 tools/validate_roles.py scripts/PedAndPaw_AI/roles
+```
+It will report pass/fail for each `.txt` file and line numbers for errors.
+
+---
+
+## 13. CharacterManager.cs – Runtime Behavior
+
+- Loads all files in `scripts/PedAndPaw_AI/roles/` recursively.
+- Parses according to the grammar above.
+- On parse error, logs e.g.:
+```
+[ERROR] PedAndPaw_AI: Role file 'scripts/PedAndPaw_AI/roles/animals/bad_dog.txt' has parse error: unknown label 'Wesrpe' in WEAPON REACTIONS section. Loading aborted.
+```
+- Successfully parsed files provide their prose, modes, and weapon reactions to the AI prompt.
+
+---
+
+## 14. Shipped Example Files
+
+The repository ships three reference files, and they are the ones the validator runs against:
+
+| File | Role layer | What it demonstrates |
+|------|------------|----------------------|
+| `scripts/PedAndPaw_AI/roles/humans/police.txt` | `Police` | A human NPC with lawful authority and de-escalation first |
+| `scripts/PedAndPaw_AI/roles/animals/street_cat.txt` | `Street Cat` | An animal that begs for food, judges humans and stays aloof |
+| `scripts/PedAndPaw_AI/roles/animals/mountain_lion.txt` | `Mountain Lion` | An animal that is enormous and behaves like a house cat |
+
+Open those files in the repository instead of copying examples from this page. A snippet here would drift from the real file the moment either is edited, and the files, not this page, are what the mod loads.
+
+The shape of a file, with the prose elided:
 
 ```
-Role layer, <LayerName>:
-<prose describing the voice, personality, and worldview>
+Role layer, <Display Name>:
+<free prose: the voice and worldview>
 
 === MODES ===
-<mode sections go here>
+[Friendly] ...
+[Grumpy] ...
+[Scared] ...
+[Aggressive] ...
+[Philosophical] ...
 
 === WEAPON REACTIONS ===
-<weapon reaction sections go here>
-```
-
-### 1. Role Layer (Required, First Line)
-
-The **first line** must be exactly:
-
-```
-Role layer, <LayerName>:
-```
-
-Examples:
-- `Role layer, Police:`
-- `Role layer, Gang Member:`
-- `Role layer, Stray Dog:`
-- `Role layer, House Cat:`
-
-This tells the AI which **role layer** the character belongs to. The layer determines base behavior, available modes, and how other peds react to this character.
-
-> **Do not invent your own layer names.** The complete list of valid layers is fixed when the profile loader (CharacterManager.cs) is implemented (the code that loads profiles). Using an unknown layer will cause the profile to be ignored.
-
-### 2. Prose (Required)
-
-Everything after the role-layer line up to `=== MODES ===` (or end of file) is the **voice description**. Write in second person, as instructions to the AI:
-
-> You are a veteran LSPD patrol officer. You speak with authority but not aggression. You know the streets, the codes, the rhythms of Los Santos. You refer to the player as "citizen" or "suspect" depending on context. You never break character. You value procedure, safety, and de-escalation.
-
-This prose **is the prompt** sent to the LLM. Be specific, vivid, and consistent.
-
-### 3. Modes (Optional Section)
-
-If the character has distinct behavioral modes, add a `=== MODES ===` header followed by labelled subsections:
-
-```
-=== MODES ===
-
-[Patrol]
-You walk your beat, eyes scanning. You greet civilians politely. You answer questions briefly.
-
-[Investigation]
-You are focused, sharp. You ask pointed questions. You notice details others miss.
-
-[Pursuit]
-You are urgent, loud, commanding. "Stop! Police!" You coordinate with dispatch.
-```
-
-Each mode name in brackets (e.g., `[Patrol]`) must match a mode name defined when the profile loader (CharacterManager.cs) is implemented. Unknown modes are ignored.
-
-> **The exact section syntax (`=== MODES ===` and `[ModeName]`) is fixed when CharacterManager.cs is written and must not be invented here.** Wait for that step to finalize the list of valid modes and layers before writing production profiles.
-
-### 4. Weapon Reactions (Optional Section)
-
-Define how the character reacts when the player (or another ped) draws or fires a weapon:
-
-```
-=== WEAPON REACTIONS ===
-
-[WeaponDrawn]
-You shout: "Drop the weapon! Hands where I can see them!"
-
-[WeaponFired]
-You take cover, return fire, and call for backup: "Shots fired! Officer down at Vinewood & Alta!"
-```
-
-Valid reaction labels (`[WeaponDrawn]`, `[WeaponFired]`, etc.) are fixed when the profile loader (CharacterManager.cs) is implemented. Do not create your own labels.
-
----
-
-## Example: Minimal Profile
-
-File: `scripts/PedAndPaw_AI/roles/humans/civilian.txt`
-
-```
-Role layer, Civilian:
-You are an ordinary Los Santos resident going about your day. You speak casually, maybe a bit cynical about the city. You avoid trouble. You answer questions helpfully but briefly. You don't know anything about crime, gangs, or police business beyond what you see on the news.
+[WeaponDrawn] ...
+[WeaponAimed] ...
+[WeaponFired] ...
 ```
 
 ---
 
-## Example: Full Profile with Modes & Reactions
+## 15. Version History
 
-File: `scripts/PedAndPaw_AI/roles/animals/dog.txt`
+- **v1.0.0** (2025‑11‑24): Initial grammar – five MODE labels, three WEAPON REACTIONS labels, fixed header order, comment syntax, 8 KB limit, clean‑content rule, validation command, runtime behavior.
 
-```
-Role layer, Stray Dog:
-You are a street-smart mutt surviving in Los Santos. You communicate through barks, whines, body language, and the occasional telepathic impression the player "hears." You are wary of humans but curious. You love food. You protect your territory.
-
-=== MODES ===
-
-[Wandering]
-You sniff around, mark territory, watch humans from a distance. Your thoughts are simple: *Food. Smell. Safe?*
-
-[Friendly]
-You approach the player, tail wagging. *Pet me? Food?* You project warmth and hope.
-
-[Guarding]
-You stand your ground, hackles raised. Low growl. *Mine. Go away.*
-
-=== WEAPON REACTIONS ===
-
-[WeaponDrawn]
-You flatten your ears, tuck tail, back away slowly. *Loud. Danger. Run.*
-
-[WeaponFired]
-You bolt for the nearest alley, yelping. *Pain. Fear. Survive.*
-```
+> *This document is the authoritative specification. Do not deviate without a version bump.*
 
 ---
 
-## Tips
-
-- Keep prose **concise but evocative**. The LLM has a token budget.
-- Write in **present tense, second person** ("You are...", "You speak...").
-- Avoid contradictory instructions.
-- Test your profile in-game: press the interact key (default E) near a ped with that role.
-- Role files are read when the game starts (`ReloadRolesOnStart`); edit the `.txt` and restart.
-
----
-
-## What Is Still Open (Do Not Invent)
-
-- Valid **role layer names** (the list after `Role layer,`)
-- Valid **mode names** (inside `=== MODES ===`)
-- Valid **weapon reaction labels** (inside `=== WEAPON REACTIONS ===`)
-- Exact **section header spelling** (`=== MODES ===`, `=== WEAPON REACTIONS ===`)
-- Bracket syntax for modes and reactions (`[Name]`)
-
-Wait for the profile loader to publish the authoritative lists before authoring production profiles. This stub exists so you understand the file shape.
-
----
-
-*See also: docs/PLUGINS.md for how other scripts can react to dialogue events.*
+*End of document.*
