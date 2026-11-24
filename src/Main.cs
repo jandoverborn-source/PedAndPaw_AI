@@ -251,6 +251,8 @@ namespace PedAndPaw_AI
                 return;
             }
 
+            Log.Info("GetUserInput returned " + (input == null ? "null" : input.Length + " characters"));
+
             if (string.IsNullOrWhiteSpace(input))
             {
                 Log.Info("Input cancelled or empty for ped " + ped.Handle);
