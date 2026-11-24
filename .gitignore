@@ -1,0 +1,6 @@
+bin/
+obj/
+*.user
+.vs/
+*.zip
+# Do NOT ignore scripts/ as it contains assets and configurations shipped to users
