@@ -1,6 +1,6 @@
 # PedAndPaw_AI
 
-**PedAndPaw_AI** is a ScriptHookVDotNet Enhanced mod for Grand Theft Auto V Enhanced that brings AI-driven conversations to pedestrians and animals using large language models. The project started on November 24, 2026, and is not finished yet.
+PedAndPaw_AI is a ScriptHookVDotNet Enhanced mod for Grand Theft Auto V Enhanced that turns the streets of Los Santos into a place for conversation. Talk to pedestrians, police, and paramedics, or chat with the rats, dogs, cats, crows, and even the sharks. Every NPC has its own mood, memory, and personality, and the replies change with the time, weather, and what you're driving or carrying. Borrow a car if they trust you, or go fishing for a sarcastic seagull. There's no violence here: animals can't be hurt, and firearms only work at shooting ranges. Nudity is off by default and can be adjusted in the settings.
 
 ---
 
