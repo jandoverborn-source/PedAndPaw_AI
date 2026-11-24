@@ -62,7 +62,7 @@ Check("defaults match the ini", () =>
 {
     var c = new ModConfig();
     AssertEqual(4.0f, c.InteractionRange, "InteractionRange");
-    AssertEqual("gemini-2.5-flash", c.Model, "Model");
+    AssertEqual("gemini-3-flash-preview", c.Model, "Model");
     AssertEqual(120, c.MaxTokensPerReply, "MaxTokensPerReply");
     AssertEqual(0, c.NudityPercent, "NudityPercent");
     AssertEqual(50, c.DefaultTrust, "DefaultTrust");
@@ -197,6 +197,41 @@ Check("daily budget", () =>
     AssertTrue(!limiter.TryAcquire("c", t0.AddSeconds(2)), "call 3 must be refused by the budget");
     AssertTrue(limiter.TryAcquire("c", t0.AddDays(1)), "the budget resets the next day");
 });
+
+// Optional live call against a real provider: dotnet run --project tests/CoreChecks -- --live
+if (args.Contains("--live"))
+{
+    var liveConfig = new ModConfig
+    {
+        Provider = "gemini",
+        BaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/",
+        Model = "gemini-3-flash-preview",
+        ApiKeyEnvVar = "PEDANDPAW_AI_KEY",
+        RequestTimeoutSeconds = 60
+    };
+
+    using var client = new OpenAiCompatibleClient(liveConfig);
+    if (!client.HasCredentials)
+    {
+        Console.WriteLine("LIVE: no key in " + liveConfig.ApiKeyEnvVar + ", skipped");
+    }
+    else
+    {
+        var liveRequest = new AiRequest
+        {
+            SystemPrompt = "You are a gruff Los Santos traffic cop. Two sentences maximum.",
+            UserMessage = "Nice weather today, officer?",
+            MaxTokens = 80,
+            Temperature = 0.8f,
+            NpcKey = "live-test"
+        };
+
+        var reply = await client.GetReplyAsync(liveRequest, CancellationToken.None);
+        Console.WriteLine(reply != null
+            ? "LIVE reply: " + reply
+            : "LIVE failure: " + client.LastError);
+    }
+}
 
 Console.WriteLine();
 Console.WriteLine(failures.Count == 0

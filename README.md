@@ -47,7 +47,7 @@ All settings live in `scripts/PedAndPaw_AI.ini`. The file documents every key; t
 | `InteractKey` / `TextMessageKey` | `[Keys]` | `E` / `T` | Talk to or dismiss the nearest ped; send a text message to nearby civilians, police and emergency services. |
 | `Provider` | `[Ai]` | `gemini` | One of `gemini`, `ollama`, `openrouter`, `groq`, `custom`. |
 | `BaseUrl` | `[Ai]` | `https://generativelanguage.googleapis.com/v1beta/openai/` | OpenAI-compatible chat completions endpoint. |
-| `Model` | `[Ai]` | `gemini-2.5-flash` | Model name for the selected provider. |
+| `Model` | `[Ai]` | `gemini-3-flash-preview` | Model name for the selected provider. |
 | `ApiKeyEnvVar` | `[Ai]` | `PEDANDPAW_AI_KEY` | Name of the environment variable that holds the key. The key itself is never stored in the ini. |
 | `Temperature` | `[Ai]` | `0.8` | Sampling temperature, 0.0–1.5. |
 | `MaxTokensPerReply` | `[Limits]` | `120` | Upper bound on reply length in tokens. |

@@ -80,3 +80,25 @@ Then read the logs in the game's `scripts/` folder:
   and `Notification.PostTicker` instead of `Notification.Show`.
 - `Script.Tick` runs often: throttle periodic scans with `Game.FrameCount % N` and never
   `await` in it.
+
+## Live AI call
+
+The provider client has no dependencies beyond the .NET Framework itself: the
+request body and the reply are read by hand, so nothing extra has to be copied
+into the player's `scripts` folder.
+
+```bash
+PEDANDPAW_AI_KEY=your_key dotnet run --project tests/CoreChecks -c Release -- --live
+```
+
+That makes one real request with the configuration at the top of the `--live`
+block and prints either `LIVE reply: ...` or `LIVE failure: <reason>`.
+
+In the game the key comes from the environment variable named by `ApiKeyEnvVar`.
+With Steam on Linux, add it to the game's launch options:
+
+```
+PEDANDPAW_AI_KEY=your_key %command%
+```
+
+Never put the key in the ini, in a role file, or anywhere in this repository.

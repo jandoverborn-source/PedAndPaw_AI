@@ -47,7 +47,7 @@ namespace PedAndPaw_AI
 
             _characters = new CharacterManager(_config, baseDirectory);
             _limiter = new RateLimiter(_config);
-            _provider = new NullAiProvider();
+            _provider = CreateProvider(_config);
 
             _interactKey = ParseKey(_config.InteractKey, Keys.E);
             _textKey = ParseKey(_config.TextMessageKey, Keys.T);
@@ -61,6 +61,26 @@ namespace PedAndPaw_AI
                      ", provider=" + _provider.GetType().Name +
                      ", keys=" + _interactKey + "/" + _textKey + "/" + _cancelKey +
                      ", ini=" + iniPath);
+        }
+
+        /// <summary>
+        /// Use the real client when a key is available (or the provider needs none),
+        /// otherwise stay on the placeholder so the game never fails without a key.
+        /// </summary>
+        private static IAiProvider CreateProvider(ModConfig config)
+        {
+            var client = new OpenAiCompatibleClient(config);
+            if (client.HasCredentials)
+            {
+                Log.Info("AI provider: " + config.Provider + " / " + config.Model + " via " + config.BaseUrl +
+                         " (key from " + config.ApiKeyEnvVar + ")");
+                return client;
+            }
+
+            Log.Warn("No key in the environment variable '" + config.ApiKeyEnvVar + "' and provider '" +
+                     config.Provider + "' is not ollama; using the placeholder provider.");
+            client.Dispose();
+            return new NullAiProvider();
         }
 
         private static Keys ParseKey(string text, Keys fallback)
@@ -309,6 +329,9 @@ namespace PedAndPaw_AI
         {
             if (string.IsNullOrWhiteSpace(reply))
             {
+                var client = _provider as OpenAiCompatibleClient;
+                if (client != null && !string.IsNullOrEmpty(client.LastError))
+                    Log.Warn("Provider error: " + client.LastError);
                 GtaScreen.ShowSubtitle("(" + role.DisplayName + " did not answer)", 2000);
                 SetState(ped, PedState.Idle);
                 return;

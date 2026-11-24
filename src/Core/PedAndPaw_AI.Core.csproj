@@ -8,6 +8,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!-- HttpClient lives in a separate framework assembly on .NET Framework. -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- PrivateAssets so net48 doesn't pull full assemblies -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2">

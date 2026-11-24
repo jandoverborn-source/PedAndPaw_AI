@@ -39,7 +39,7 @@ public class ModConfig
     // Ai
     public string Provider { get; set; } = "gemini";
     public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/v1beta/openai/";
-    public string Model { get; set; } = "gemini-2.5-flash";
+    public string Model { get; set; } = "gemini-3-flash-preview";
     public string ApiKeyEnvVar { get; set; } = "PEDANDPAW_AI_KEY";
     public int RequestTimeoutSeconds { get; set; } = 15;
     public float Temperature { get; set; } = 0.8f;
