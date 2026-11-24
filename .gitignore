@@ -6,4 +6,7 @@ obj/
 # Build output: produced from src/ by dotnet build; releases attach the DLL instead
 scripts/*.dll
 scripts/*.pdb
+# Python cache from tools/
+__pycache__/
+*.pyc
 # Do NOT ignore scripts/ as it contains assets and configurations shipped to users
