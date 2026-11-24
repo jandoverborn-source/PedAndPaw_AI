@@ -16,6 +16,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Core has its own project; do not compile its sources twice. -->
+    <Compile Remove="Core/**" />
+    <None Remove="Core/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Core/PedAndPaw_AI.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- SHVDNE v1.1.0.6 managed API, .NET Framework 4.8.
          Verify every member against Docs/ScriptHookVDotNet3.xml from the release; never guess. -->
     <Reference Include="ScriptHookVDotNet3">
