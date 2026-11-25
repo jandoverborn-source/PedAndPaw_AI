@@ -138,7 +138,15 @@ It will report pass/fail for each `.txt` file and line numbers for errors.
 - **Mode Switching:** When `DynamicModeSwitching` is enabled in `PedAndPaw_AI.ini`, NPCs switch modes based on weapon events:
   - **Scared:** Triggered by aiming at the NPC or recent gunshots nearby.
   - **Grumpy:** Triggered by the player drawing a weapon.
+- **Model routing:** the ped's model hash is cast back to `GTA.PedHash`, which gives a stable
+  name such as `Cop01SMY` or `Cat`. Names containing Cop, Sheriff or Security get the `Police`
+  role; other humans get `Civilian`; `Cat` gets `Street Cat` and `MountainLion` gets
+  `Mountain Lion`. When no matching role file exists yet, the deterministic fallback below
+  applies, so a missing file never breaks a conversation.
 - **Persistence:** Role and mode assignments are deterministic based on the NPC's handle, ensuring consistent personalities during a session.
+- **Conversation safety:** a conversation is not started while the ped is in combat or fleeing,
+  or while the player has a wanted level; the text box also makes the player untargetable
+  while it has focus, so typing cannot get you shot.
 
 ---
 

@@ -229,6 +229,19 @@ namespace PedAndPaw_AI
                 return;
             }
 
+            // The text box blocks the player, so do not open one in the middle of a fight.
+            if (ped.IsInCombat || ped.IsFleeing)
+            {
+                GtaScreen.ShowSubtitle("(This one is in no mood to talk.)", 2000);
+                return;
+            }
+
+            if (Game.Player.Wanted.WantedLevel > 0)
+            {
+                GtaScreen.ShowSubtitle("(Not while the police are looking for you.)", 2500);
+                return;
+            }
+
             BeginTalking(ped);
         }
 
@@ -303,8 +316,12 @@ namespace PedAndPaw_AI
             Log.Info("Dialogue started with ped " + ped.Handle + " as " + roleLayer + " (" + mode + ")");
 
             string input;
+            var player = Game.Player.Character;
+            var wasTargetable = player != null && player.CanBeTargetted;
             try
             {
+                // Typing blocks the player; do not let them be shot or stabbed meanwhile.
+                if (player != null) player.CanBeTargetted = false;
                 input = Game.GetUserInput("");
             }
             catch (Exception ex)
@@ -312,6 +329,10 @@ namespace PedAndPaw_AI
                 Log.Error("GetUserInput failed: " + ex.Message);
                 SetState(ped, PedState.Idle);
                 return;
+            }
+            finally
+            {
+                if (player != null && wasTargetable) player.CanBeTargetted = true;
             }
 
             Log.Info("GetUserInput returned " + (input == null ? "null" : input.Length + " characters"));

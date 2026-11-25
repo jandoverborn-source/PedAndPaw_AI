@@ -30,7 +30,7 @@ public static class PromptBuilder
 
         sb.AppendLine();
         sb.AppendLine("Rules:");
-        sb.AppendLine("- Reply in one or two short sentences. Never write an essay.");
+        sb.AppendLine("- Reply in two or three short sentences. Never write an essay.");
         sb.AppendLine("- Never describe graphic violence, gore or injury.");
         sb.AppendLine("- No animal in this world can be harmed or killed. Never threaten an animal and never describe one being hurt.");
 

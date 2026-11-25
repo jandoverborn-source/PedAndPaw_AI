@@ -80,16 +80,70 @@ namespace PedAndPaw_AI
             if (_roles.Count == 0) return null;
 
             var isAnimal = !ped.IsHuman;
+
+            // Route by model name where it is reliable: PedHash is an enum of hashes, so
+            // casting the model hash back to it gives a stable name such as "Cop01SMY".
+            var modelName = ModelName(ped);
+
+            if (isAnimal)
+            {
+                var wanted = AnimalRoleForModel(modelName);
+                var animal = FindRole(wanted) ?? AnyRole(isAnimal: true) ?? AnyRole(isAnimal: false);
+                roleLayer = animal.DisplayName;
+                return animal;
+            }
+
+            var wantedHuman = HumanRoleForModel(modelName);
+            var human = FindRole(wantedHuman) ?? AnyRole(isAnimal: false) ?? AnyRole(isAnimal: true);
+            roleLayer = human.DisplayName;
+            return human;
+        }
+
+        /// <summary>Name of the ped's model, or an empty string when it cannot be read.</summary>
+        private static string ModelName(Ped ped)
+        {
+            try
+            {
+                return ((GTA.PedHash)ped.Model.Hash).ToString();
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        private static string HumanRoleForModel(string modelName)
+        {
+            if (modelName.IndexOf("Cop", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                modelName.IndexOf("Sheriff", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                modelName.IndexOf("Security", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "Police";
+
+            return "Civilian";
+        }
+
+        private static string AnimalRoleForModel(string modelName)
+        {
+            if (modelName.IndexOf("Cat", StringComparison.OrdinalIgnoreCase) >= 0) return "Street Cat";
+            if (modelName.IndexOf("MountainLion", StringComparison.OrdinalIgnoreCase) >= 0) return "Mountain Lion";
+            return "";
+        }
+
+        private RoleDefinition FindRole(string displayName)
+        {
+            if (string.IsNullOrWhiteSpace(displayName)) return null;
+            RoleDefinition role;
+            return _roles.TryGetValue(displayName, out role) ? role : null;
+        }
+
+        /// <summary>Deterministic fallback when no model-specific role exists yet.</summary>
+        private RoleDefinition AnyRole(bool isAnimal)
+        {
             var pool = _roles.Values
                 .Where(role => IsAnimalRole(role) == isAnimal)
                 .OrderBy(role => role.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-
-            if (pool.Count == 0) pool = _roles.Values.OrderBy(role => role.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
-
-            var chosen = pool[Math.Abs(ped.Handle) % pool.Count];
-            roleLayer = chosen.DisplayName;
-            return chosen;
+            return pool.Count > 0 ? pool[0] : null;
         }
 
         private static bool IsAnimalRole(RoleDefinition role)
@@ -138,7 +192,18 @@ namespace PedAndPaw_AI
             if (!_config.NpcFacePlayer || ped == null || !ped.IsAlive || player == null) return;
             try
             {
-                ped.Task.TurnTo(player, 2000);
+                // ClearAll stops the ped walking away mid-sentence; TurnTo makes the
+                // conversation feel aimed at the player. Skipped in combat, where
+                // interfering with the ped's task would be dangerous and rude.
+                if (ped.IsOnFoot && !ped.IsInCombat)
+                {
+                    ped.Task.ClearAll();
+                    ped.Task.TurnTo(player, 3000);
+                }
+                else
+                {
+                    ped.Task.TurnTo(player, 2000);
+                }
             }
             catch (Exception ex)
             {
