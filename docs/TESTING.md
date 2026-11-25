@@ -135,3 +135,16 @@ used. Never put the key in the ini, in a role file, or anywhere in this reposito
   a provider that returns normal content.
 - The live check accepts overrides:
   `PEDANDPAW_LIVE_PROVIDER=ollama PEDANDPAW_LIVE_BASEURL=http://localhost:11434/v1 PEDANDPAW_LIVE_MODEL=llama3.2:3b dotnet run --project tests/CoreChecks -- --live`
+
+## Third-party mods used while testing
+
+These are not part of PedAndPaw_AI and are not shipped; they live in the game folder only.
+
+| Mod | Version | Why | Source |
+|-----|---------|-----|--------|
+| ScriptHookVDotNet Enhanced | 1.1.0.6 | the API the mod targets, pinned in CI | https://github.com/Chiheb-Bacha/ScriptHookVDotNetEnhanced |
+| StraightToStoryMode | v1.0 | skips the legal, splash and landing screens so the game goes straight into story mode; story mode only, no Online | https://github.com/Chiheb-Bacha/StraightToStoryMode |
+
+`StraightToStoryMode.asi` was installed on 2026-11-25 (42 496 bytes, md5
+`01523e666895e07e3af6d9c1fce9102e`); its licence is kept next to it in the game folder as
+`StraightToStoryMode-LICENSE.txt`. Remove the `.asi` to go back to the normal start menu.
