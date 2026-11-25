@@ -172,6 +172,17 @@ This ensures:
 
 > A character may admit it is an NPC when asked directly (`NpcSelfAwareness`).
 
+### Content policy (age 13+)
+
+The mod is written for a **13+** audience. That means:
+
+- Nudity is allowed as the `NudityPercent` setting permits (plain, never lewd), and
+  the mod announces in the log and in game when nudity is switched on.
+- **Sexual content is never allowed**, at any setting: no sexual acts, arousal,
+  suggestions or explicit description.
+- No gore, no drug use, no slurs, no threats aimed at real people.
+- Animals can never be harmed, and the AI is told so in every prompt.
+
 ---
 
 ## 12. License & Contributing

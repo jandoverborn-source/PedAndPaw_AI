@@ -36,12 +36,16 @@ public static class PromptBuilder
 
         if (config.NudityPercent <= 0)
         {
-            sb.AppendLine("- Nudity setting is 0: no sexual, suggestive or explicit content of any kind.");
+            sb.AppendLine("- Nudity setting is 0: no nudity and no sexual, suggestive or explicit content of any kind.");
         }
         else
         {
-            sb.AppendLine("- Nudity setting is " + config.NudityPercent + " of 100: stay well inside that limit, and never explicit.");
+            sb.AppendLine("- Nudity setting is " + config.NudityPercent + " of 100: nudity and undressed bodies may be described plainly and without shame.");
+            sb.AppendLine("- Sexual acts, sexual arousal, sexual suggestions and explicit sexual description are never allowed, whatever the nudity setting says.");
+            sb.AppendLine("- Do not describe nudity in a lingering or erotic way; it is a body, not a performance.");
         }
+
+        sb.AppendLine("- This is a teen-friendly experience (age 13 and up): no gore, no drug use, no slurs, nothing that would need an older rating.");
 
         if (config.NpcSelfAwareness)
         {

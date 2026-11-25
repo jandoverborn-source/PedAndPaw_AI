@@ -56,6 +56,14 @@ namespace PedAndPaw_AI
             Tick += OnTick;
             KeyDown += OnKeyDown;
 
+            if (_config.NudityPercent > 0)
+            {
+                var notice = "PedAndPaw_AI: nudity is enabled (" + _config.NudityPercent +
+                             "%). Sexual content stays disabled.";
+                Log.Warn(notice);
+                GtaScreen.ShowSubtitle(notice, 6000);
+            }
+
             Log.Info("PedAndPaw_AI " + ModBridge.ApiVersion + " loaded. enabled=" + _config.Enabled +
                      ", roles=" + _characters.Roles.Count +
                      ", provider=" + _provider.GetType().Name +

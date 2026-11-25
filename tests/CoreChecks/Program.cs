@@ -140,12 +140,23 @@ ExpectReject("a file over 8 KB", "Role layer, Test:\n" + new string('x', 8200) +
 RoleParser.TryParse(policeText, "police.txt", out var police, out _);
 var strictConfig = ModConfig.FromIniText(File.ReadAllText(iniPath));
 
-Check("prompt forbids sexual content at NudityPercent 0", () =>
+Check("prompt forbids nudity and sex at NudityPercent 0", () =>
 {
     var prompt = PromptBuilder.BuildSystemPrompt(police, strictConfig, "Friendly");
-    AssertContains(prompt, "no sexual", "content rule");
+    AssertContains(prompt, "no nudity", "nudity rule at 0");
+    AssertContains(prompt, "no sexual", "sexual content rule");
     AssertContains(prompt, "Friendly", "mode section");
     AssertContains(prompt, "harm", "animal rule");
+});
+
+Check("prompt allows nudity but never sex above 0", () =>
+{
+    var nudityConfig = ModConfig.FromIniText(File.ReadAllText(iniPath));
+    nudityConfig.NudityPercent = 40;
+    var prompt = PromptBuilder.BuildSystemPrompt(police, nudityConfig, "Friendly");
+    AssertContains(prompt, "nudity and undressed bodies may be described", "nudity allowed above 0");
+    AssertContains(prompt, "never allowed", "sex still forbidden");
+    AssertContains(prompt, "13", "teen rating rule");
 });
 
 Check("prompt admits being an NPC when NpcSelfAwareness is on", () =>
