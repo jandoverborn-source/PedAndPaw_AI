@@ -93,7 +93,13 @@ Check("bad ini input warns instead of throwing", () =>
 
 // 4. Every shipped role file parses with the five modes and three reactions.
 var roleFiles = Directory.GetFiles(rolesPath, "*.txt", SearchOption.AllDirectories).OrderBy(p => p).ToArray();
-Check("three role files are shipped", () => AssertEqual(3, roleFiles.Length, "role file count"));
+Check("the shipped role files are present and named", () =>
+{
+    AssertTrue(roleFiles.Length >= 4, "expected at least 4 role files, got " + roleFiles.Length);
+    var names = roleFiles.Select(f => Path.GetFileNameWithoutExtension(f)).ToList();
+    foreach (var expected in new[] { "police", "civilian", "street_cat", "mountain_lion" })
+        AssertTrue(names.Contains(expected), "missing role file: " + expected);
+});
 
 foreach (var file in roleFiles)
 {
