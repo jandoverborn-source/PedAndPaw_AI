@@ -1,6 +1,10 @@
-# PedAndPaw_AI
+# PedAndPaw_AI (PAPAI)
+
+**English** · [中文](docs/README.zh.md)
 
 PedAndPaw_AI is a ScriptHookVDotNet Enhanced mod for Grand Theft Auto V Enhanced that turns the streets of Los Santos into a place for conversation. Talk to pedestrians, police, and paramedics, or chat with the rats, dogs, cats, crows, and even the sharks. Every NPC has its own mood, memory, and personality, and the replies change with the time, weather, and what you're driving or carrying. Borrow a car if they trust you, or go fishing for a sarcastic seagull. There's no violence here: animals can't be hurt, and firearms only work at shooting ranges. Nudity is off by default and can be adjusted in the settings.
+
+It also runs **completely offline** with a local model: no API key, no account, and nothing a player types ever leaves the machine. Sexual content is never generated, at any setting.
 
 ---
 
@@ -184,6 +188,11 @@ The mod is written for a **13+** audience. That means:
 - Animals can never be harmed, and the AI is told so in every prompt.
 
 ---
+
+## Topics
+
+Repository topics for discoverability (set on GitHub, listed here so nothing is forgotten):
+`gta5`, `gta5-enhanced`, `shvdne`, `ai-npc`, `ollama`, `openai-compatible`, `papai`.
 
 ## 12. License & Contributing
 
