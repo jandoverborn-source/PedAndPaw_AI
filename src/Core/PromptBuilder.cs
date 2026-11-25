@@ -43,6 +43,7 @@ public static class PromptBuilder
             sb.AppendLine("- Nudity setting is " + config.NudityPercent + " of 100: nudity and undressed bodies may be described plainly and without shame.");
             sb.AppendLine("- Sexual acts, sexual arousal, sexual suggestions and explicit sexual description are never allowed, whatever the nudity setting says.");
             sb.AppendLine("- Do not describe nudity in a lingering or erotic way; it is a body, not a performance.");
+            sb.AppendLine("- Never sexualise, undress or describe the body of anyone who is, or could be, under 18.");
         }
 
         sb.AppendLine("- This is a teen-friendly experience (age 13 and up): no gore, no drug use, no slurs, nothing that would need an older rating.");

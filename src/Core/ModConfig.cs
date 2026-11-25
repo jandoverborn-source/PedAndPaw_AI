@@ -113,6 +113,7 @@ public class ModConfig
 
         var lines = iniText.Split('\n');
         var currentSection = "";
+        var seenKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         for (int i = 0; i < lines.Length; i++)
         {
@@ -133,7 +134,20 @@ public class ModConfig
             if (eqIdx > 0)
             {
                 string key = line.Substring(0, eqIdx).Trim();
-                string value = line.Substring(eqIdx + 1).Trim();
+                string value = StripInlineComment(line.Substring(eqIdx + 1)).Trim();
+
+                string firstSection;
+                if (seenKeys.TryGetValue(key, out firstSection))
+                {
+                    if (string.Equals(firstSection, currentSection, StringComparison.OrdinalIgnoreCase))
+                        warnings.Add($"Duplicate key '{key}' in section [{currentSection}] (line {i + 1}); the last value wins.");
+                    else
+                        warnings.Add($"Key '{key}' appears in both [{firstSection}] and [{currentSection}] (line {i + 1}); only the last value is used.");
+                }
+                else
+                {
+                    seenKeys[key] = currentSection;
+                }
 
                 // Case-insensitive key matching
                 string lowerKey = key.ToLowerInvariant();
@@ -159,14 +173,14 @@ public class ModConfig
                         case "talktopolice": config.TalkToPolice = ParseBool(value, config.TalkToPolice, warnings, $"Interaction: talktopolice (line {i + 1})"); break;
                         case "talktoemergency": config.TalkToEmergency = ParseBool(value, config.TalkToEmergency, warnings, $"Interaction: talktoemergency (line {i + 1})"); break;
                         case "talktoanimals": config.TalkToAnimals = ParseBool(value, config.TalkToAnimals, warnings, $"Interaction: talktoanimals (line {i + 1})"); break;
-                        case "npcfaceplayer": config.NpcFacePlayer = ParseBool(value, config.NpcFacePlayer, warnings, $"Interaction: npcfaceseplayer (line {i + 1})"); break;
+                        case "npcfaceplayer": config.NpcFacePlayer = ParseBool(value, config.NpcFacePlayer, warnings, $"Interaction: npcfaceplayer (line {i + 1})"); break;
 
                         // Context
                         case "usetimeofday": config.UseTimeOfDay = ParseBool(value, config.UseTimeOfDay, warnings, $"Context: usetimeofday (line {i + 1})"); break;
                         case "useweather": config.UseWeather = ParseBool(value, config.UseWeather, warnings, $"Context: useweather (line {i + 1})"); break;
                         case "usearea": config.UseArea = ParseBool(value, config.UseArea, warnings, $"Context: usearea (line {i + 1})"); break;
                         case "usevehicle": config.UseVehicle = ParseBool(value, config.UseVehicle, warnings, $"Context: usevehicle (line {i + 1})"); break;
-                        case "useweaponstate": config.UseWeaponState = ParseBool(value, config.UseWeaponState, warnings, $"Context: usewaponstate (line {i + 1})"); break;
+                        case "useweaponstate": config.UseWeaponState = ParseBool(value, config.UseWeaponState, warnings, $"Context: useweaponstate (line {i + 1})"); break;
                         case "useaimingstate": config.UseAimingState = ParseBool(value, config.UseAimingState, warnings, $"Context: useaimingstate (line {i + 1})"); break;
                         case "usewantedlevel": config.UseWantedLevel = ParseBool(value, config.UseWantedLevel, warnings, $"Context: usewantedlevel (line {i + 1})"); break;
                         case "userecentgunshots": config.UseRecentGunshots = ParseBool(value, config.UseRecentGunshots, warnings, $"Context: userecentgunshots (line {i + 1})"); break;
@@ -194,7 +208,7 @@ public class ModConfig
                         case "dynamicmodeswitching": config.DynamicModeSwitching = ParseBool(value, config.DynamicModeSwitching, warnings, $"Behavior: dynamicmodeswitching (line {i + 1})"); break;
                         case "attitudesystem": config.AttitudeSystem = ParseBool(value, config.AttitudeSystem, warnings, $"Behavior: attitudesystem (line {i + 1})"); break;
                         case "defaulttrust": config.DefaultTrust = ParseInt(value, config.DefaultTrust, warnings, $"Behavior: defaulttrust (line {i + 1})"); break;
-                        case "npcselfawareness": config.NpcSelfAwareness = ParseBool(value, config.NpcSelfAwareness, warnings, $"Behavior: npccelfawareness (line {i + 1})"); break;
+                        case "npcselfawareness": config.NpcSelfAwareness = ParseBool(value, config.NpcSelfAwareness, warnings, $"Behavior: npcselfawareness (line {i + 1})"); break;
 
                         // Weapons
                         case "enableweaponreactions": config.EnableWeaponReactions = ParseBool(value, config.EnableWeaponReactions, warnings, $"Weapons: enableweaponreactions (line {i + 1})"); break;
@@ -237,8 +251,73 @@ public class ModConfig
             }
         }
 
+        ClampValues(config, warnings);
+
         config.Warnings = warnings;
         return config;
+    }
+
+    /// <summary>Strip a trailing ';' or '#' comment that is not inside quotes.</summary>
+    private static string StripInlineComment(string value)
+    {
+        var inQuotes = false;
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (c == '"') inQuotes = !inQuotes;
+            else if (!inQuotes && (c == ';' || c == '#')) return value.Substring(0, i);
+        }
+        return value;
+    }
+
+    private static void Clamp(int value, int min, int max, string name, Action<int> set, List<string> warnings)
+    {
+        if (value < min || value > max)
+        {
+            var clamped = Math.Min(max, Math.Max(min, value));
+            warnings.Add($"{name} = {value} is outside {min}..{max}; using {clamped}.");
+            set(clamped);
+        }
+    }
+
+    private static void ClampFloat(float value, float min, float max, string name, Action<float> set, List<string> warnings)
+    {
+        if (value < min || value > max)
+        {
+            var clamped = Math.Min(max, Math.Max(min, value));
+            warnings.Add($"{name} = {value} is outside {min}..{max}; using {clamped}.");
+            set(clamped);
+        }
+    }
+
+    /// <summary>
+    /// Replace values that would break the mod with safe ones, and say so.
+    /// A zero request timeout or a zero request budget is a silent kill switch.
+    /// </summary>
+    private static void ClampValues(ModConfig config, List<string> warnings)
+    {
+        Clamp(config.NudityPercent, 0, 100, "NudityPercent", v => config.NudityPercent = v, warnings);
+        ClampFloat(config.Temperature, 0f, 2f, "Temperature", v => config.Temperature = v, warnings);
+        ClampFloat(config.InteractionRange, 0.5f, 50f, "InteractionRange", v => config.InteractionRange = v, warnings);
+        Clamp(config.RequestTimeoutSeconds, 1, 300, "RequestTimeoutSeconds", v => config.RequestTimeoutSeconds = v, warnings);
+        Clamp(config.MaxTokensPerReply, 1, 4096, "MaxTokensPerReply", v => config.MaxTokensPerReply = v, warnings);
+        Clamp(config.MaxReplyCharacters, 1, 2000, "MaxReplyCharacters", v => config.MaxReplyCharacters = v, warnings);
+        Clamp(config.MaxRequestsPerMinute, 1, 600, "MaxRequestsPerMinute", v => config.MaxRequestsPerMinute = v, warnings);
+        Clamp(config.DailyRequestBudget, 1, 100000, "DailyRequestBudget", v => config.DailyRequestBudget = v, warnings);
+        Clamp(config.MaxConcurrentConversations, 1, 50, "MaxConcurrentConversations", v => config.MaxConcurrentConversations = v, warnings);
+        Clamp(config.NpcCooldownSeconds, 0, 3600, "NpcCooldownSeconds", v => config.NpcCooldownSeconds = v, warnings);
+        Clamp(config.MemoryMessagesPerNpc, 0, 100, "MemoryMessagesPerNpc", v => config.MemoryMessagesPerNpc = v, warnings);
+        Clamp(config.GunshotMemorySeconds, 0, 3600, "GunshotMemorySeconds", v => config.GunshotMemorySeconds = v, warnings);
+        Clamp(config.DefaultTrust, 0, 100, "DefaultTrust", v => config.DefaultTrust = v, warnings);
+        Clamp(config.MinTrustToLendVehicle, 0, 100, "MinTrustToLendVehicle", v => config.MinTrustToLendVehicle = v, warnings);
+        Clamp(config.ModeChangeIntervalMinutes, 0, 1440, "ModeChangeIntervalMinutes", v => config.ModeChangeIntervalMinutes = v, warnings);
+
+        var knownZones = new[] { "shootingrange", "ownpropertyoutsidecity" };
+        foreach (var zone in config.AllowShootingIn)
+        {
+            if (Array.FindIndex(knownZones, z => string.Equals(z, zone.Trim(), StringComparison.OrdinalIgnoreCase)) < 0)
+                warnings.Add($"Unknown zone '{zone}' in AllowShootingIn; known zones are ShootingRange and OwnPropertyOutsideCity.");
+        }
     }
 
     /// <summary>
@@ -277,10 +356,12 @@ public class ModConfig
         {
             case "true":
             case "yes":
+            case "on":
             case "1":
                 return true;
             case "false":
             case "no":
+            case "off":
             case "0":
                 return false;
             default:
@@ -301,7 +382,7 @@ public class ModConfig
     /// <summary>Parse a float INI value.</summary>
     private static float ParseFloat(string value, float fallback, List<string> warnings, string context)
     {
-        if (float.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float result))
+        if (float.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float result))
             return result;
         warnings.Add($"Cannot parse float value '{value}' in {context}");
         return fallback;

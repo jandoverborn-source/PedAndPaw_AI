@@ -209,6 +209,63 @@ Check("daily budget", () =>
     AssertTrue(limiter.TryAcquire("c", t0.AddDays(1)), "the budget resets the next day");
 });
 
+// 8. Ini edge cases that a code review flagged.
+Check("inline comments after a value are ignored", () =>
+{
+    var config = ModConfig.FromIniText("[General]\nEnabled = true ; switched on for testing\n[Limits]\nMaxTokensPerReply = 80 # short\n");
+    AssertTrue(config.Enabled, "Enabled should be true");
+    AssertEqual(80, config.MaxTokensPerReply, "MaxTokensPerReply");
+    AssertEqual(0, config.Warnings.Count, "warnings: " + string.Join("; ", config.Warnings));
+});
+
+Check("on and off are accepted as booleans", () =>
+{
+    var config = ModConfig.FromIniText("[General]\nEnabled = off\nShowNotifications = on\n");
+    AssertTrue(!config.Enabled, "off should mean false");
+    AssertTrue(config.ShowNotifications, "on should mean true");
+});
+
+Check("a comma decimal separator is a warning, not a silent wrong value", () =>
+{
+    var config = ModConfig.FromIniText("[Interaction]\nInteractionRange = 4,0\n");
+    AssertEqual(4.0f, config.InteractionRange, "InteractionRange falls back to the default");
+    AssertTrue(config.Warnings.Count > 0, "a warning is expected");
+});
+
+Check("a key in the wrong section, and a repeated key, both warn", () =>
+{
+    var misplaced = ModConfig.FromIniText("[General]\nEnabled = true\n[Limits]\nEnabled = false\n");
+    AssertTrue(misplaced.Warnings.Exists(w => w.Contains("Enabled") && w.Contains("both")),
+        "misplaced key warning expected: " + string.Join("; ", misplaced.Warnings));
+
+    var repeated = ModConfig.FromIniText("[General]\nEnabled = true\nEnabled = false\n");
+    AssertTrue(repeated.Warnings.Exists(w => w.Contains("Duplicate key")),
+        "duplicate warning expected: " + string.Join("; ", repeated.Warnings));
+});
+
+Check("out-of-range values are clamped with a warning", () =>
+{
+    var config = ModConfig.FromIniText("[Content]\nNudityPercent = 250\n[Ai]\nTemperature = 5\n[Limits]\nMaxRequestsPerMinute = 0\n");
+    AssertEqual(100, config.NudityPercent, "NudityPercent");
+    AssertEqual(2.0f, config.Temperature, "Temperature");
+    AssertEqual(1, config.MaxRequestsPerMinute, "MaxRequestsPerMinute");
+    AssertTrue(config.Warnings.Count >= 3, "one warning per clamped value");
+});
+
+Check("an unknown shooting zone warns", () =>
+{
+    var config = ModConfig.FromIniText("[Weapons]\nAllowShootingIn = ShootingRnge, OwnPropertyOutsideCity\n");
+    AssertTrue(config.Warnings.Exists(w => w.Contains("ShootingRnge")), "unknown zone warning expected");
+});
+
+Check("the nudity policy never permits sexualising anyone under 18", () =>
+{
+    var nudityConfig = ModConfig.FromIniText(File.ReadAllText(iniPath));
+    nudityConfig.NudityPercent = 60;
+    var prompt = PromptBuilder.BuildSystemPrompt(police, nudityConfig, "Friendly");
+    AssertContains(prompt, "under 18", "minor protection rule");
+});
+
 // Optional live call against a real provider: dotnet run --project tests/CoreChecks -- --live
 if (args.Contains("--live"))
 {

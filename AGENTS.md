@@ -17,7 +17,7 @@ Källkoden ligger i src/. Det som ska kopieras till spelet ligger i scripts/.
 ## Mappstruktur
 - src/: alla .cs-filer och PedAndPaw_AI.csproj (net48, bygger till scripts/)
 - scripts/: PedAndPaw_AI.ini och PedAndPaw_AI/roles/ (en .txt-fil per roll eller djur, i animals/ och humans/)
-- docs/: PROFILES.md, PLUGINS.md, TESTING.md och docs/planning/ (arbetsdokument och underlag)
+- docs/: PROFILES.md, PLUGINS.md, TESTING.md, docs/planning/ (underlag) och docs/reviews/ (granskningar)
 - .github/workflows/build.yml
 
 ## Modellroller
