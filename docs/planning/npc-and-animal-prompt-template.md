@@ -150,3 +150,42 @@ this street for a while. *Loud-noise. Pain-noise. Run.*
 
 - **Tiden:** kompletterande fält för klockan bör komma från koden, annars hittar
   modellen på en tid som inte stämmer med spelet. Det gör `ContextScanner` redan.
+
+## Varför egenskaper — och hur du ber en gratis LLM skriva dem
+
+Poängen med mallen är att **få filer ska ge många individer**. Räkna på en art:
+
+- 10 core-egenskaper, välj 3 → 120 kombinationer
+- 8 tokiga egenskaper, välj 0 eller 1 → 9 varianter
+- 10 namn → 10 identiteter
+
+Det ger **120 × 9 × 10 = 10 800 olika katter ur en enda rollfil.** Sju arter med samma
+siffror blir över 75 000 individer, och varje ny art kostar dig ungefär en kvarts
+skrivande. Det är därför egenskaperna är den billigaste kvalitetshöjningen vi har: koden
+gör kombinationerna, du skriver bara listorna en gång.
+
+### Så ber du en gratis LLM om listorna
+
+Skriv en art i taget — då håller kvaliteten. En prompt som fungerar:
+
+> Skriv en lista för en gatukatt i GTA V. Ge mig:
+> 12 core-egenskaper (2–4 ord var, konkreta beteenden),
+> 8 tokiga egenskaper (roliga, ofarliga, 13+-vänliga),
+> 12 namn som en katt kan heta.
+> Svara bara med tre rubriker: CORE, QUIRK, NAMES, och en post per rad.
+
+Klistra sedan in raderna i rollfilens `=== TRAITS ===`-sektion:
+
+```
+=== TRAITS ===
+core: lazy, chases butterflies, likes boxes
+quirk: believes the player is a piece of furniture
+names: Silvia, Mrr, Gunnel, Tass
+```
+
+Tre regler som sparar tid:
+
+1. **Beteenden, inte adjektiv.** "Jagar fjärilar" ger spelbara svar; "nyfiken" ger inget.
+2. **13+-vänligt utan undantag.** Inga sexuella anspelningar, inget våld, inga droger.
+3. **Kör validatorn efteråt.** Den fångar stavfel, fel rubriker och för stora filer innan
+   du startar spelet.

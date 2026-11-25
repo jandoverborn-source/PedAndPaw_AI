@@ -56,6 +56,15 @@ namespace PedAndPaw_AI
             Tick += OnTick;
             KeyDown += OnKeyDown;
 
+            var cloudProvider = !string.Equals(_config.Provider, "ollama", StringComparison.OrdinalIgnoreCase);
+            if (cloudProvider && _provider is OpenAiCompatibleClient)
+            {
+                var notice = "PAPAI: cloud provider in use (" + _config.Provider + "). " +
+                             "What you type is sent to that provider; a local model keeps it on this machine.";
+                Log.Warn(notice);
+                GtaScreen.ShowSubtitle(notice, 6000);
+            }
+
             if (_config.NudityPercent > 0)
             {
                 var notice = "PedAndPaw_AI: nudity is enabled (" + _config.NudityPercent +

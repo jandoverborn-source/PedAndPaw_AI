@@ -4,7 +4,7 @@
 
 PedAndPaw_AI is a ScriptHookVDotNet Enhanced mod for Grand Theft Auto V Enhanced that turns the streets of Los Santos into a place for conversation. Talk to pedestrians, police, and paramedics, or chat with the rats, dogs, cats, crows, and even the sharks. Every NPC has its own mood, memory, and personality, and the replies change with the time, weather, and what you're driving or carrying. Borrow a car if they trust you, or go fishing for a sarcastic seagull. There's no violence here: animals can't be hurt, and firearms only work at shooting ranges. Nudity is off by default and can be adjusted in the settings.
 
-It also runs **completely offline** with a local model: no API key, no account, and nothing a player types ever leaves the machine. Sexual content is never generated, at any setting.
+It also runs **completely offline** with a local model: no API key, no account, and nothing a player types leaves the machine. If you choose a cloud provider instead, your text **is** sent to that provider, and on its free tier it may be used to improve their products — [docs/PRIVACY.md](docs/PRIVACY.md) spells out the difference, including what it means for minors. Sexual content is never generated, at any setting.
 
 ---
 
