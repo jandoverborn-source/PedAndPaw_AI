@@ -60,19 +60,27 @@ public class TraitSelection
     public string Trait3 { get; set; } = "";
     public string Quirk { get; set; } = "";
 
-    /// <summary>Placeholder values ready for PromptBuilder.</summary>
+    /// <summary>
+    /// Placeholder values ready for PromptBuilder. Empty values get a neutral
+    /// substitute, so a role file that uses {NAME} before it has any trait pools
+    /// never sends the model an empty gap like "You are , a ...".
+    /// </summary>
     public Dictionary<string, string> ToPlaceholders()
     {
+        var name = string.IsNullOrWhiteSpace(Name) ? Species : Name;
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["NAME"] = Name,
-            ["SPECIES"] = Species,
-            ["TRAIT_1"] = Trait1,
-            ["TRAIT_2"] = Trait2,
-            ["TRAIT_3"] = Trait3,
-            ["QUIRK"] = Quirk
+            ["NAME"] = string.IsNullOrWhiteSpace(name) ? "someone" : name,
+            ["SPECIES"] = string.IsNullOrWhiteSpace(Species) ? "a local" : Species,
+            ["TRAIT_1"] = Neutral(Trait1, "ordinary in most things"),
+            ["TRAIT_2"] = Neutral(Trait2, "keeps to themselves"),
+            ["TRAIT_3"] = Neutral(Trait3, "notices the small things"),
+            ["QUIRK"] = Neutral(Quirk, "no particular quirk")
         };
     }
+
+    private static string Neutral(string value, string fallback)
+        => string.IsNullOrWhiteSpace(value) ? fallback : value;
 }
 
 /// <summary>

@@ -100,6 +100,20 @@ public static class PromptBuilder
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// Tidy a provider reply: trim, and strip the wrapping quotes a small model likes
+    /// to add ("Hello, citizen." becomes Hello, citizen.).
+    /// </summary>
+    public static string CleanReply(string? reply)
+    {
+        if (reply is null) return "";
+        var text = reply.Trim();
+        if (text.Length == 0) return "";
+        if (text.Length >= 2 && text[0] == '"' && text[text.Length - 1] == '"')
+            text = text.Substring(1, text.Length - 2).Trim();
+        return text;
+    }
+
     /// <summary>Replace {PLACEHOLDER} with the value supplied, leaving unknown ones alone.</summary>
     public static string Substitute(string? text, IReadOnlyDictionary<string, string>? placeholders)
     {

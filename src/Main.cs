@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -368,9 +369,13 @@ namespace PedAndPaw_AI
             placeholders["WEATHER"] = context.Weather;
             placeholders["AREA"] = context.Area;
 
-            Log.Info("Traits for ped " + ped.Handle + ": " + traits.Name + " - " +
-                     traits.Trait1 + ", " + traits.Trait2 + ", " + traits.Trait3 +
-                     (string.IsNullOrEmpty(traits.Quirk) ? "" : " | quirk: " + traits.Quirk));
+            if (role.HasTraits)
+            {
+                Log.Info("Traits for ped " + ped.Handle + ": " + traits.Name + " - " +
+                         string.Join(", ", new[] { traits.Trait1, traits.Trait2, traits.Trait3 }
+                             .Where(trait => !string.IsNullOrWhiteSpace(trait))) +
+                         (string.IsNullOrWhiteSpace(traits.Quirk) ? "" : " | quirk: " + traits.Quirk));
+            }
 
             var request = new AiRequest
             {
@@ -423,7 +428,7 @@ namespace PedAndPaw_AI
                 return;
             }
 
-            var text = reply.Trim();
+            var text = PromptBuilder.CleanReply(reply);
             if (_config.MaxReplyCharacters > 0 && text.Length > _config.MaxReplyCharacters)
                 text = text.Substring(0, _config.MaxReplyCharacters).TrimEnd() + "...";
 

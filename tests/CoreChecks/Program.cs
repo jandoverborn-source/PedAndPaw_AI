@@ -322,6 +322,30 @@ Check("placeholders are substituted case-insensitively", () =>
     AssertTrue(text.Contains("{UNKNOWN}"), "unknown placeholder is left alone");
 });
 
+Check("a role without trait pools still gets usable placeholder values", () =>
+{
+    var empty = new TraitSelection { Species = "Civilian" };
+    var values = empty.ToPlaceholders();
+    AssertEqual("Civilian", values["NAME"], "NAME falls back to the species");
+    AssertTrue(values["TRAIT_1"].Length > 0, "TRAIT_1 is never empty");
+    AssertTrue(values["QUIRK"].Length > 0, "QUIRK is never empty");
+
+    var prompt = PromptBuilder.Substitute("You are {NAME}, {TRAIT_1}.", values);
+    AssertTrue(!prompt.Contains("{"), "no placeholder may survive substitution: " + prompt);
+});
+
+Check("provider quotes around a reply are stripped", () =>
+{
+    AssertEqual("Hello, citizen.", PromptBuilder.CleanReply("\"Hello, citizen.\""), "wrapping quotes");
+    AssertEqual("Hello.", PromptBuilder.CleanReply("  Hello.  "), "whitespace");
+    AssertEqual("", PromptBuilder.CleanReply(null), "null reply");
+});
+
+Check("the request timeout default allows a local model to warm up", () =>
+{
+    AssertEqual(30, new ModConfig().RequestTimeoutSeconds, "RequestTimeoutSeconds default");
+});
+
 // 8. Ini edge cases that a code review flagged.
 Check("inline comments after a value are ignored", () =>
 {
