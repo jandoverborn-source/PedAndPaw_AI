@@ -369,6 +369,19 @@ Check("a comma decimal separator is a warning, not a silent wrong value", () =>
     AssertTrue(config.Warnings.Count > 0, "a warning is expected");
 });
 
+Check("the clock can be forced to a brighter hour", () =>
+{
+    var forced = ModConfig.FromIniText("[Time]\nForceTimeOfDay = 9\nPauseClock = true\n");
+    AssertEqual(9, forced.ForceTimeOfDay, "ForceTimeOfDay");
+    AssertTrue(forced.PauseClock, "PauseClock");
+
+    var clamped = ModConfig.FromIniText("[Time]\nForceTimeOfDay = 30\n");
+    AssertEqual(23, clamped.ForceTimeOfDay, "out-of-range hour is clamped");
+
+    var off = ModConfig.FromIniText("[Time]\nForceTimeOfDay = -1\n");
+    AssertEqual(-1, off.ForceTimeOfDay, "-1 leaves the game's own time alone");
+});
+
 Check("a key in the wrong section, and a repeated key, both warn", () =>
 {
     var misplaced = ModConfig.FromIniText("[General]\nEnabled = true\n[Limits]\nEnabled = false\n");

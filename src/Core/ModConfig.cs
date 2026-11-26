@@ -25,6 +25,10 @@ public class ModConfig
     public bool TalkToAnimals { get; set; } = true;
     public bool NpcFacePlayer { get; set; } = true;
 
+    // Time
+    public int ForceTimeOfDay { get; set; } = -1;
+    public bool PauseClock { get; set; } = false;
+
     // Context
     public bool UseTimeOfDay { get; set; } = true;
     public bool UseWeather { get; set; } = true;
@@ -175,6 +179,10 @@ public class ModConfig
                         case "talktoanimals": config.TalkToAnimals = ParseBool(value, config.TalkToAnimals, warnings, $"Interaction: talktoanimals (line {i + 1})"); break;
                         case "npcfaceplayer": config.NpcFacePlayer = ParseBool(value, config.NpcFacePlayer, warnings, $"Interaction: npcfaceplayer (line {i + 1})"); break;
 
+                        // Time
+                        case "forcetimeofday": config.ForceTimeOfDay = ParseInt(value, config.ForceTimeOfDay, warnings, $"Time: forcetimeofday (line {i + 1})"); break;
+                        case "pauseclock": config.PauseClock = ParseBool(value, config.PauseClock, warnings, $"Time: pauseclock (line {i + 1})"); break;
+
                         // Context
                         case "usetimeofday": config.UseTimeOfDay = ParseBool(value, config.UseTimeOfDay, warnings, $"Context: usetimeofday (line {i + 1})"); break;
                         case "useweather": config.UseWeather = ParseBool(value, config.UseWeather, warnings, $"Context: useweather (line {i + 1})"); break;
@@ -297,6 +305,7 @@ public class ModConfig
     private static void ClampValues(ModConfig config, List<string> warnings)
     {
         Clamp(config.NudityPercent, 0, 100, "NudityPercent", v => config.NudityPercent = v, warnings);
+        Clamp(config.ForceTimeOfDay, -1, 23, "ForceTimeOfDay", v => config.ForceTimeOfDay = v, warnings);
         ClampFloat(config.Temperature, 0f, 2f, "Temperature", v => config.Temperature = v, warnings);
         ClampFloat(config.InteractionRange, 0.5f, 50f, "InteractionRange", v => config.InteractionRange = v, warnings);
         Clamp(config.RequestTimeoutSeconds, 1, 300, "RequestTimeoutSeconds", v => config.RequestTimeoutSeconds = v, warnings);

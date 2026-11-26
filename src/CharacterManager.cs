@@ -199,22 +199,53 @@ namespace PedAndPaw_AI
             return target;
         }
 
+        /// <summary>How long a ped is asked to stay put during a conversation.</summary>
+        public const int HoldMilliseconds = 15000;
+
+        /// <summary>
+        /// Keeps an animal from being hurt: the mod promises animals can never be
+        /// killed, and a kicked cat dying in the first test proved it was only words.
+        /// </summary>
+        public static int ProtectAnimals(Ped player)
+        {
+            if (player == null) return 0;
+
+            var protectedCount = 0;
+            try
+            {
+                var peds = World.GetNearbyPeds(player, 60f, new Model[0]);
+                if (peds == null) return 0;
+
+                foreach (var ped in peds)
+                {
+                    if (ped == null || !ped.Exists() || ped.IsHuman) continue;
+                    if (ped.IsInvincible) continue;
+
+                    ped.IsInvincible = true;
+                    ped.CanBeTargetted = false;
+                    protectedCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Could not protect animals: " + ex.Message);
+            }
+
+            return protectedCount;
+        }
+
         /// <summary>Turn the ped towards the player when a conversation starts.</summary>
         public void FacePlayer(Ped ped, Ped player)
         {
             if (!_config.NpcFacePlayer || ped == null || !ped.IsAlive || player == null) return;
             try
             {
-                // ClearAll stops the ped walking away mid-sentence; TurnTo makes the
-                // conversation feel aimed at the player. Skipped in combat, where
-                // interfering with the ped's task would be dangerous and rude.
+                // StandStill is gentler than ClearAll: it holds the ped for the length of
+                // the conversation without wiping a task the game gave them, which is what
+                // made a whole group turn hostile in the first outdoor test.
                 if (ped.IsOnFoot && !ped.IsInCombat)
                 {
-                    ped.Task.ClearAll();
-                    ped.Task.TurnTo(player, 3000);
-                }
-                else
-                {
+                    ped.Task.StandStill(HoldMilliseconds);
                     ped.Task.TurnTo(player, 2000);
                 }
             }

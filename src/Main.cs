@@ -33,6 +33,9 @@ namespace PedAndPaw_AI
         private static readonly Model[] NoModelFilter = new Model[0];
 
         private DateTime _lastGunshotUtc = DateTime.MinValue;
+        private int _heldPedHandle;
+        private DateTime _holdUntilUtc = DateTime.MinValue;
+        private int _protectedAnimals;
         private DateTime _lastShotWarnUtc = DateTime.MinValue;
         private int _activePedHandle;
         private PedState _activeState = PedState.Idle;
@@ -73,6 +76,8 @@ namespace PedAndPaw_AI
                 Log.Warn(notice);
                 GtaScreen.ShowSubtitle(notice, 6000);
             }
+
+            ApplyTimeOfDay();
 
             Log.Info("PedAndPaw_AI " + ModBridge.ApiVersion + " loaded. enabled=" + _config.Enabled +
                      ", roles=" + _characters.Roles.Count +
@@ -136,6 +141,34 @@ namespace PedAndPaw_AI
             }
         }
 
+        /// <summary>
+        /// Optional: put the game clock at a fixed hour so the scene is bright enough to
+        /// see. ForceTimeOfDay = -1 leaves the game's own time alone.
+        /// </summary>
+        private void ApplyTimeOfDay()
+        {
+            if (_config.ForceTimeOfDay < 0) return;
+
+            try
+            {
+                var currentHour = GTA.Chrono.GameClock.Hour;
+                var currentMinute = GTA.Chrono.GameClock.Minute;
+                var currentSecond = GTA.Chrono.GameClock.Second;
+
+                GTA.Chrono.GameClock.AddToCurrentTime(
+                    _config.ForceTimeOfDay - currentHour, -currentMinute, -currentSecond);
+
+                if (_config.PauseClock) GTA.Chrono.GameClock.IsPaused = true;
+
+                Log.Info("Clock set to " + _config.ForceTimeOfDay.ToString("00") + ":00" +
+                         (_config.PauseClock ? " and paused" : "") + " for a brighter scene.");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Could not set the clock: " + ex.Message);
+            }
+        }
+
         private static Keys ParseKey(string text, Keys fallback)
         {
             Keys parsed;
@@ -160,6 +193,45 @@ namespace PedAndPaw_AI
             }
 
             TrackShots();
+            KeepAnimalProtection();
+            KeepPedStanding();
+        }
+
+        /// <summary>The mod promises animals can never be hurt; this makes it true.</summary>
+        private void KeepAnimalProtection()
+        {
+            if (Game.FrameCount % 30 != 0) return;
+
+            var before = _protectedAnimals;
+            _protectedAnimals = CharacterManager.ProtectAnimals(Game.Player.Character);
+            if (_protectedAnimals > 0 && before == 0)
+                Log.Info("Animals are now protected from harm (" + _protectedAnimals + " nearby).");
+        }
+
+        /// <summary>Re-apply StandStill while a conversation is being typed, so the NPC does not wander off.</summary>
+        private void KeepPedStanding()
+        {
+            if (_heldPedHandle == 0 || DateTime.UtcNow > _holdUntilUtc) return;
+            if (Game.FrameCount % 60 != 0) return;
+
+            try
+            {
+                var player = Game.Player.Character;
+                var peds = World.GetNearbyPeds(player, 8f, new Model[0]);
+                if (peds == null) return;
+                foreach (var ped in peds)
+                {
+                    if (ped != null && ped.Exists() && ped.Handle == _heldPedHandle && !ped.IsInCombat)
+                    {
+                        ped.Task.StandStill(CharacterManager.HoldMilliseconds);
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Could not keep the ped standing: " + ex.Message);
+            }
         }
 
         /// <summary>Remember gunfire when the player or a nearby ped fires.</summary>
@@ -235,6 +307,7 @@ namespace PedAndPaw_AI
 
             if (asTextMessage && !ped.IsHuman)
             {
+                Log.Info("Refused: a text message to an animal (ped " + ped.Handle + ").");
                 GtaScreen.ShowSubtitle("You cannot send a text message to an animal.", 2000);
                 return;
             }
@@ -242,12 +315,14 @@ namespace PedAndPaw_AI
             // The text box blocks the player, so do not open one in the middle of a fight.
             if (ped.IsInCombat || ped.IsFleeing)
             {
+                Log.Info("Refused: ped " + ped.Handle + " is " + (ped.IsInCombat ? "in combat" : "fleeing") + ".");
                 GtaScreen.ShowSubtitle("(This one is in no mood to talk.)", 2000);
                 return;
             }
 
             if (Game.Player.Wanted.WantedLevel > 0)
             {
+                Log.Info("Refused: wanted level " + Game.Player.Wanted.WantedLevel + ".");
                 GtaScreen.ShowSubtitle("(Not while the police are looking for you.)", 2500);
                 return;
             }
@@ -322,6 +397,8 @@ namespace PedAndPaw_AI
             }
 
             _characters.FacePlayer(ped, Game.Player.Character);
+            _heldPedHandle = ped.Handle;
+            _holdUntilUtc = DateTime.UtcNow.AddMilliseconds(CharacterManager.HoldMilliseconds);
             _activePedHandle = ped.Handle;
             SetState(ped, PedState.AwaitingPlayer);
             ModBridge.RaiseDialogueStarted(ped, roleLayer);
