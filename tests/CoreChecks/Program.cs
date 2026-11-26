@@ -107,7 +107,10 @@ foreach (var file in roleFiles)
     {
         var ok = RoleParser.TryParse(File.ReadAllText(file), Path.GetFileName(file), out var role, out var errors);
         AssertTrue(ok, "parse errors: " + string.Join("; ", errors));
-        AssertEqual(5, role.Modes.Count, "mode count");
+        AssertTrue(role.Modes.Count >= 5 && role.Modes.Count <= 6,
+            "mode count should be 5, plus the optional Professional, got " + role.Modes.Count);
+        foreach (var required in Labels.Modes)
+            AssertTrue(role.Modes.ContainsKey(required), "missing mode " + required);
         AssertEqual(3, role.Reactions.Count, "reaction count");
         AssertTrue(!string.IsNullOrWhiteSpace(role.Prose), "prose must not be empty");
     });
