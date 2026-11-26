@@ -256,6 +256,69 @@ Check("v1.1 warns about adjectives and thin lists instead of failing", () =>
     AssertTrue(warnings.Any(w => w.Contains("recommended")), "thin list warning expected");
 });
 
+// 7c. Context buckets, seeded traits and placeholder substitution.
+Check("context buckets map hours and weather", () =>
+{
+    AssertEqual("night", ContextBuckets.TimeOfDay(3), "03:00");
+    AssertEqual("morning", ContextBuckets.TimeOfDay(8), "08:00");
+    AssertEqual("noon", ContextBuckets.TimeOfDay(12), "12:00");
+    AssertEqual("afternoon", ContextBuckets.TimeOfDay(15), "15:00");
+    AssertEqual("evening", ContextBuckets.TimeOfDay(19), "19:00");
+    AssertEqual("night", ContextBuckets.TimeOfDay(23), "23:00");
+
+    AssertEqual("daylight", ContextBuckets.Light(12), "12:00 light");
+    AssertEqual("dusk", ContextBuckets.Light(19), "19:00 light");
+    AssertEqual("darkness", ContextBuckets.Light(2), "02:00 light");
+
+    AssertEqual("clear", ContextBuckets.Weather("Clear"), "Clear");
+    AssertEqual("cloudy", ContextBuckets.Weather("Overcast"), "Overcast");
+    AssertEqual("rain", ContextBuckets.Weather("Thunder"), "Thunder");
+    AssertEqual("fog", ContextBuckets.Weather("Foggy"), "Foggy");
+    AssertEqual("", ContextBuckets.Weather(null), "null weather");
+});
+
+Check("the professional mode is repeatable by temperature", () =>
+{
+    AssertEqual(0.8f, ContextBuckets.TemperatureFor("Friendly", 0.8f), "Friendly keeps the ini value");
+    AssertEqual(0.25f, ContextBuckets.TemperatureFor("Professional", 0.8f), "Professional is cooled down");
+});
+
+Check("traits are seeded per NPC and stable within a session", () =>
+{
+    AssertTrue(RoleParser.TryParse(v11, "v11.txt", out var role, out _, out _), "fixture should parse");
+
+    var first = TraitSelector.Select(role, 4242);
+    var again = TraitSelector.Select(role, 4242);
+    AssertEqual(first.Name, again.Name, "same ped, same name");
+    AssertEqual(first.Trait1, again.Trait1, "same ped, same trait");
+    AssertEqual(first.Quirk, again.Quirk, "same ped, same quirk");
+
+    var distinct = new HashSet<string>();
+    for (var seed = 1; seed <= 30; seed++)
+    {
+        var individual = TraitSelector.Select(role, seed);
+        distinct.Add(individual.Name + "|" + individual.Trait1 + "|" + individual.Trait2 + "|" + individual.Trait3);
+    }
+    AssertTrue(distinct.Count > 5, "30 ped ids should produce several distinct individuals, got " + distinct.Count);
+
+    AssertTrue(!string.IsNullOrWhiteSpace(first.Trait1), "a trait is picked");
+    AssertTrue(first.Name.Length > 0, "a name is picked");
+});
+
+Check("placeholders are substituted case-insensitively", () =>
+{
+    var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["NAME"] = "Silvia",
+        ["TIME_OF_DAY"] = "evening"
+    };
+
+    var text = PromptBuilder.Substitute("Hej {NAME}, det är {time_of_day}. {UNKNOWN}", values);
+    AssertTrue(text.Contains("Silvia"), "name substituted: " + text);
+    AssertTrue(text.Contains("evening"), "bucket substituted: " + text);
+    AssertTrue(text.Contains("{UNKNOWN}"), "unknown placeholder is left alone");
+});
+
 // 8. Ini edge cases that a code review flagged.
 Check("inline comments after a value are ignored", () =>
 {

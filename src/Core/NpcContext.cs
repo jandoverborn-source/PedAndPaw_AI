@@ -16,8 +16,11 @@ public class NpcContext
     /// <summary>Name the game shows for the player, if known.</summary>
     public string PlayerName { get; set; } = "";
 
-    /// <summary>Time of day, for example "18:42" or "evening".</summary>
+    /// <summary>Coarse time bucket: morning, noon, afternoon, evening or night. Never a clock time.</summary>
     public string TimeOfDay { get; set; } = "";
+
+    /// <summary>Light bucket: daylight, dusk or darkness.</summary>
+    public string Light { get; set; } = "";
 
     /// <summary>Weather, for example "Clear" or "Rain".</summary>
     public string Weather { get; set; } = "";

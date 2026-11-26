@@ -189,3 +189,110 @@ Tre regler som sparar tid:
 2. **13+-vänligt utan undantag.** Inga sexuella anspelningar, inget våld, inga droger.
 3. **Kör validatorn efteråt.** Den fångar stavfel, fel rubriker och för stora filer innan
    du startar spelet.
+
+## Så ser formatet ut när du skriver (grammatik v1.1, byggd 2026-11-26)
+
+Detta är **exakt** vad validatorn och spelet accepterar. Skriv filerna så här och kör
+`python3 tools/validate_roles.py scripts/PedAndPaw_AI/roles` innan du startar spelet.
+
+### Filens delar, i den här ordningen
+
+```
+Role layer, Katt:                      <- rad 1, kolon på slutet, namn 1-40 tecken
+Du är en gatukatt ... {NAME} ... {TRAIT_1} ...   <- fri prosa, minst en rad
+
+=== MODES ===                          <- obligatorisk
+[Friendly] ...                         <- fem obligatoriska lägen
+[Grumpy] ...
+[Scared] ...
+[Aggressive] ...
+[Philosophical] ...
+[Professional] ...                     <- valfri, bara för yrkesroller
+
+=== WEAPON REACTIONS ===               <- obligatorisk
+[WeaponDrawn] ...
+[WeaponAimed] ...
+[WeaponFired] ...
+
+=== TRAITS ===                         <- valfri, måste ligga sist
+[CORE]
+ett beteende per rad
+[QUIRK]
+noll eller en tokig egenskap
+[NAMES]
+ett namn per rad
+```
+
+### Platshållarna du får använda
+
+Bara dessa. Allt annat i klamrar är ett **fel** och filen avvisas.
+
+| Platshållare | Blir |
+|---|---|
+| `{NAME}` | ett namn ur `[NAMES]`, valt för just den NPC:n |
+| `{SPECIES}` | art eller yrke, från rollens namn |
+| `{TRAIT_1}` `{TRAIT_2}` `{TRAIT_3}` | tre beteenden ur `[CORE]` |
+| `{QUIRK}` | noll eller en ur `[QUIRK]` |
+| `{TIME_OF_DAY}` | morning, noon, afternoon, evening eller night |
+| `{LIGHT}` | daylight, dusk eller darkness |
+| `{WEATHER}` | clear, cloudy, rain eller fog |
+| `{AREA}` | gatunamn från spelet |
+
+Klockslaget kommer **aldrig** som "18:42" — bara som en hink. Det är avsiktligt: modellen
+ska inte kunna hitta på en tid som motsäger spelet.
+
+### Vad som är fel respektive bara en varning
+
+| Regel | Utfall |
+|---|---|
+| Okänd platshållare, okänd sektion, okänt läge, tom body, fel ordning | **Fel** — filen laddas inte |
+| Färre än 10 core, 8 quirks eller 10 namn | **Varning** — filen laddas ändå |
+| Adjektiv i `[CORE]` ("nyfiken") i stället för beteende ("jagar fjärilar") | **Varning** |
+| Ord som 13+-policyn ogillar (sex, droger, gore, skällsord) | **Varning** |
+| Fil över 64 KB | **Fel** |
+
+### Ett fullständigt minimalt exempel
+
+```
+Role layer, Katt:
+Du är {NAME}, en gatukatt i Los Santos. {TRAIT_1}, {TRAIT_2} och {TRAIT_3}.
+Kvick: {QUIRK}. Det är {TIME_OF_DAY}, ljuset är {LIGHT} och vädret är {WEATHER}.
+
+=== MODES ===
+[Friendly]
+Du stryker dig mot spelarens ben. *Mat? Klapp?*
+[Grumpy]
+Du vänder ryggen till. *Du är tolererad.*
+[Scared]
+Du trycker dig mot marken. *För högt. Gömma.*
+[Aggressive]
+Du reser ragg och står kvar i dörren. *Mitt. Min fläck.*
+[Philosophical]
+Du sitter på muren och tittar på gatan. *De har bråttom. Jag har muren.*
+
+=== WEAPON REACTIONS ===
+[WeaponDrawn]
+Du blir stilla och backar långsamt. *Hög ljud sak.*
+[WeaponAimed]
+Du trycker dig mot asfalten och försvinner under bilen. *Sedd.*
+[WeaponFired]
+Du sticker. *Ont-ljud. Springa.*
+
+=== TRAITS ===
+[CORE]
+jagar fjärilar
+sover i kartonger
+tigger mat vid bänkar
+[QUIRK]
+tror att spelaren är ett möbelstycke
+[NAMES]
+Silvia
+Mrr
+Tass
+```
+
+### Om du skriver på svenska och vill ha engelska filer
+
+Spelet och modellen bryr sig inte om vilket språk rollfilen är skriven på — men **repo:t är
+engelskt** och exemplen är engelska. Skriv på engelska i filer som ska in i repot, och låt
+gärna en gratis-LLM översätta ditt svenska utkast innan du validerar.

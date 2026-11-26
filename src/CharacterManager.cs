@@ -152,6 +152,19 @@ namespace PedAndPaw_AI
                    role.SourceName.IndexOf("animals", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        /// <summary>Seeded personality for this individual (3 traits, 0-1 quirk, 1 name).</summary>
+        public TraitSelection SelectTraits(RoleDefinition role, Ped ped)
+        {
+            return TraitSelector.Select(role, ped.Handle);
+        }
+
+        /// <summary>Occupation roles start in the Professional mode when they define it.</summary>
+        public string StartMode(RoleDefinition role, Ped ped)
+        {
+            if (role != null && role.Modes.ContainsKey("Professional")) return "Professional";
+            return EnsureMode(ped);
+        }
+
         /// <summary>The current mood of a ped, chosen once and remembered.</summary>
         public string EnsureMode(Ped ped)
         {

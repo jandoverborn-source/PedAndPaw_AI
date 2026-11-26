@@ -12,6 +12,20 @@ namespace PedAndPaw_AI
     /// </summary>
     public static class ContextScanner
     {
+        private static NpcContext _envCache;
+        private static DateTime _envAtUtc = DateTime.MinValue;
+
+        private static string SafeStreetName(Ped ped)
+        {
+            try
+            {
+                return World.GetStreetName(ped.Position);
+            }
+            catch
+            {
+                return "";
+            }
+        }
         public static NpcContext Scan(Ped ped, ModConfig config, RoleDefinition role, string mode, DateTime lastGunshotUtc, DateTime nowUtc)
         {
             var player = Game.Player.Character;
@@ -26,23 +40,33 @@ namespace PedAndPaw_AI
             context.IsAnimal = !ped.IsHuman;
             context.DistanceMeters = player.Position.DistanceTo(ped.Position);
 
+            // The slow fields are the same for everyone nearby, so they are cached for 30 s
+            // (the specification review asked for at most one refresh per 30 s).
+            var nowUtcForCache = DateTime.UtcNow;
+            if (_envCache == null || (nowUtcForCache - _envAtUtc).TotalSeconds > 30)
+            {
+                var hour = GTA.Chrono.GameClock.Hour;
+                _envCache = new NpcContext
+                {
+                    TimeOfDay = ContextBuckets.TimeOfDay(hour),
+                    Light = ContextBuckets.Light(hour),
+                    Weather = ContextBuckets.Weather(World.Weather.ToString()),
+                    Area = SafeStreetName(ped)
+                };
+                _envAtUtc = nowUtcForCache;
+            }
+
             if (config.UseTimeOfDay)
-                context.TimeOfDay = GTA.Chrono.GameClock.Hour.ToString("00") + ":" + GTA.Chrono.GameClock.Minute.ToString("00");
+            {
+                context.TimeOfDay = _envCache.TimeOfDay;
+                context.Light = _envCache.Light;
+            }
 
             if (config.UseWeather)
-                context.Weather = World.Weather.ToString();
+                context.Weather = _envCache.Weather;
 
             if (config.UseArea)
-            {
-                try
-                {
-                    context.Area = World.GetStreetName(ped.Position);
-                }
-                catch
-                {
-                    context.Area = "";
-                }
-            }
+                context.Area = _envCache.Area;
 
             if (config.UseVehicle)
             {

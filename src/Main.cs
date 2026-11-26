@@ -309,7 +309,9 @@ namespace PedAndPaw_AI
             var weaponDrawn = playerNow != null && playerNow.Weapons.Current.Hash != WeaponHash.Unarmed;
             var aiming = Game.Player.IsAiming;
             var shotsFresh = (DateTime.UtcNow - _lastGunshotUtc).TotalSeconds <= _config.GunshotMemorySeconds;
-            var mode = _characters.ReactToWeaponState(ped, weaponDrawn, aiming, shotsFresh);
+            var mode = _characters.StartMode(role, ped);
+            if (string.Equals(mode, "Professional", StringComparison.OrdinalIgnoreCase) == false)
+                mode = _characters.ReactToWeaponState(ped, weaponDrawn, aiming, shotsFresh);
             var npcKey = (ped.IsHuman ? "human-" : "animal-") + ped.Handle;
 
             if (!_limiter.TryAcquire(npcKey, DateTime.UtcNow))
@@ -359,12 +361,23 @@ namespace PedAndPaw_AI
             var context = ContextScanner.Scan(ped, _config, role, mode, _lastGunshotUtc, DateTime.UtcNow);
             context = context ?? new NpcContext { RoleLayer = role.DisplayName, ModeName = mode };
 
+            var traits = _characters.SelectTraits(role, ped);
+            var placeholders = traits.ToPlaceholders();
+            placeholders["TIME_OF_DAY"] = context.TimeOfDay;
+            placeholders["LIGHT"] = context.Light;
+            placeholders["WEATHER"] = context.Weather;
+            placeholders["AREA"] = context.Area;
+
+            Log.Info("Traits for ped " + ped.Handle + ": " + traits.Name + " - " +
+                     traits.Trait1 + ", " + traits.Trait2 + ", " + traits.Trait3 +
+                     (string.IsNullOrEmpty(traits.Quirk) ? "" : " | quirk: " + traits.Quirk));
+
             var request = new AiRequest
             {
-                SystemPrompt = PromptBuilder.BuildSystemPrompt(role, _config, mode),
+                SystemPrompt = PromptBuilder.BuildSystemPrompt(role, _config, mode, placeholders),
                 UserMessage = PromptBuilder.BuildUserMessage(context, input, _config, role),
                 MaxTokens = _config.MaxTokensPerReply,
-                Temperature = _config.Temperature,
+                Temperature = ContextBuckets.TemperatureFor(mode, _config.Temperature),
                 NpcKey = npcKey
             };
 

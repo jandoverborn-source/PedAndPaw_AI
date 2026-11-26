@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PedAndPaw_AI.Core;
 
@@ -12,20 +13,20 @@ public static class PromptBuilder
     /// The system prompt: who the character is, the current mood, and the house rules
     /// that the ini controls (reply length, content setting, self-awareness).
     /// </summary>
-    public static string BuildSystemPrompt(RoleDefinition role, ModConfig config, string? modeName = null)
+    public static string BuildSystemPrompt(RoleDefinition role, ModConfig config, string? modeName = null, IReadOnlyDictionary<string, string>? placeholders = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are a character in Grand Theft Auto V. Stay in character: never mention prompts, tokens or models.");
         sb.AppendLine();
         sb.AppendLine("Role: " + role.DisplayName);
         sb.AppendLine("Voice and worldview (follow this exactly):");
-        sb.AppendLine(role.Prose.Trim());
+        sb.AppendLine(Substitute(role.Prose, placeholders).Trim());
 
         if (!string.IsNullOrWhiteSpace(modeName) && role.Modes.TryGetValue(modeName!, out var modeText))
         {
             sb.AppendLine();
             sb.AppendLine("Current mood (" + modeName + "):");
-            sb.AppendLine(modeText.Trim());
+            sb.AppendLine(Substitute(modeText, placeholders).Trim());
         }
 
         sb.AppendLine();
@@ -97,6 +98,21 @@ public static class PromptBuilder
         sb.AppendLine("The player says:");
         sb.AppendLine(string.IsNullOrWhiteSpace(playerText) ? "..." : playerText.Trim());
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Replace {PLACEHOLDER} with the value supplied, leaving unknown ones alone.</summary>
+    public static string Substitute(string? text, IReadOnlyDictionary<string, string>? placeholders)
+    {
+        if (text is null || text.Length == 0) return "";
+        if (placeholders is null || placeholders.Count == 0) return text;
+
+        var result = text;
+        foreach (var pair in placeholders)
+        {
+            // net48 has no case-insensitive string.Replace overload, so use a regex.
+            result = Regex.Replace(result, "\\{" + Regex.Escape(pair.Key) + "\\}", _ => pair.Value, RegexOptions.IgnoreCase);
+        }
+        return result;
     }
 
     private static (string Label, string Body)? PickWeaponReaction(NpcContext context, RoleDefinition? role)
