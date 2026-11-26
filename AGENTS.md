@@ -13,6 +13,9 @@ Källkoden ligger i src/. Det som ska kopieras till spelet ligger i scripts/.
 - Gissa aldrig SHVDNE-API-signaturer. Om du är osäker, markera det och eskalera.
 - Rollfiler är vanliga textfiler (.txt), inte JSON. Innehållet är användarens egen beskrivning av personligheten.
 - Skriv kodkommentarer, ini-kommentarer och dokumentation på engelska. Repo:t är öppen källkod.
+- Ändra aldrig filer i docs/reviews/. De är underlag och förslag, inte levande dokument.
+  Beslut och ändringar skrivs i motsvarande dokument i docs/ eller docs/planning/.
+  Ett nytt granskningsunderlag läggs till som en ny fil, aldrig som en redigering av en gammal.
 
 ## Mappstruktur
 - src/: alla .cs-filer och PedAndPaw_AI.csproj (net48, bygger till scripts/)

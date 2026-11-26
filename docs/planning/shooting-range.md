@@ -430,6 +430,28 @@ Bättre nästa steg skulle vara att:**
 
         metallmål = flip-down/fold animation eller rotation**
 
-  
+## Rättelse från projektägaren (2026-11-26): använd spelets egna skjutbanor
 
+Det finns **tre befintliga inomhusskjutbanor i GTA V** med färdiga props: tavlor, ställ,
+diskar, belysning och väggar. Vi ska **inte** bygga en egen bana från grunden och inte
+hitta på koordinater eller propnamn.
 
+Planen är därför:
+
+1. **Använd de befintliga banorna.** Vi behöver deras positioner och vilka props som hör
+   till dem. Koordinaterna verifieras i spelet av ägaren — vi gissar aldrig.
+2. **Bygg inget som redan finns.** Bara det som saknas: AI-instruktören, poängräkningen och
+   kopplingen till moddens samtalsmotor.
+3. **Props listas, inte påhittas.** Propnamn hämtas ur spelets egen lista över existerande
+   objekt (`PedHash`/`ObjectHash`-enumen i API-dumpen), aldrig ur minnet.
+
+### Vad som behövs från ägaren innan bygget
+
+| Uppgift | Varför |
+|---|---|
+| Position för de tre banorna | Vi måste veta var de ligger, inte gissa |
+| Vilka av banornas props som räknas som träffobjekt | Poängen ska räknas på rätt saker |
+| Om spelaren får ta med egna vapen eller får lånevapen | Påverkar hur banan startar |
+| Om instruktören ska stå på en fast plats eller följa spelaren | Påverkar AI-rollens läge |
+
+Tills listan finns är skjutbanan **planerad, inte påbörjad** — och det står så i roadmapen.

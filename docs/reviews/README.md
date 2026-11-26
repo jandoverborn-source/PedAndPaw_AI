@@ -30,3 +30,17 @@ Exempel: `2026-11-25-modconfig-claude-haiku.md`.
 
 Regeln är enkel: **inget fynd får försvinna tyst.** Antingen åtgärdas det, eller så står
 det kvar som `deferred`/`open` med en anledning.
+
+## Filerna här är underlag — de redigeras aldrig
+
+En granskningsfil är ett **tidsdokument**: vad någon påpekade vid ett tillfälle. Den ska
+därför inte uppdateras när koden ändras. Beslut, åtgärder och den levande sanningen hör
+hemma i:
+
+- `docs/PROFILES.md` — rollfilernas grammatik
+- `docs/PLUGINS.md` — plugin-ytan
+- `docs/TESTING.md` — hur man testar
+- `docs/PRIVACY.md` — data och ålder
+- `docs/planning/` — underlag och planer
+
+Kommer det ett nytt underlag läggs det till som en **ny** fil med eget datum.
