@@ -36,6 +36,7 @@ namespace PedAndPaw_AI
         private int _heldPedHandle;
         private DateTime _holdUntilUtc = DateTime.MinValue;
         private int _protectedAnimals;
+        private bool _animalProtectionLogged;
         private DateTime _lastShotWarnUtc = DateTime.MinValue;
         private int _activePedHandle;
         private PedState _activeState = PedState.Idle;
@@ -202,10 +203,12 @@ namespace PedAndPaw_AI
         {
             if (Game.FrameCount % 30 != 0) return;
 
-            var before = _protectedAnimals;
             _protectedAnimals = CharacterManager.ProtectAnimals(Game.Player.Character);
-            if (_protectedAnimals > 0 && before == 0)
+            if (_protectedAnimals > 0 && !_animalProtectionLogged)
+            {
+                _animalProtectionLogged = true;
                 Log.Info("Animals are now protected from harm (" + _protectedAnimals + " nearby).");
+            }
         }
 
         /// <summary>Re-apply StandStill while a conversation is being typed, so the NPC does not wander off.</summary>
