@@ -455,3 +455,78 @@ Planen är därför:
 | Om instruktören ska stå på en fast plats eller följa spelaren | Påverkar AI-rollens läge |
 
 Tills listan finns är skjutbanan **planerad, inte påbörjad** — och det står så i roadmapen.
+
+## Fakta från gta.fandom.com (hämtat 2026-11-26 via wikins API)
+
+Källa: https://gta.fandom.com/wiki/Ammu-Nation_Shooting_Ranges
+
+- **Antal banor i GTA V/Online: två**, båda i Ammu-Nation-butiker — **Cypress Flats** och
+  **Pillbox Hill**. Projektägaren nämnde tre; det behöver redas ut (tredje bana i Enhanced,
+  i en Online-uppdatering, eller en annan typ av bana).
+- **Inträde: $14.**
+- **Kunderna på banan talar koreanska** (mandarin i PC-versionen). Bra karaktärsdetalj för
+  en "range patron"-rollfil.
+- **Varningsskyltarna** är färdigt samtalsmaterial för en skjutledare: hörsel- och
+  ögonskydd, inget ätande eller drickande, patronhylsor i hinken, handtvätt efter bly,
+  ammunitionstyp (endast full metal jacket), och den bästa raden: *"Never point a loaded or
+  unloaded firearm at anyone on these premises."*
+- **Poängskala per vapentyp** med brons, silver och guld. Exempel:
+
+| Vapentyp | Brons | Silver | Guld |
+|---|---|---|---|
+| Handeldvapen (statiska mål) | 1 400 | 2 000 | 2 800 |
+| Handeldvapen (rörliga mål) | 650 | 3 000 | 15 000 |
+| Kulsprutepistol (statiska, vändbara) | 4 000 | 6 000 | 12 000 |
+| Automatkarbin (statiska, tre träffar) | 2 500 | 3 550 | 7 550 |
+| Hagelgevär (statiska, en träff) | 22 | 32 | 46 |
+| Lätt kulspruta (fjärrmål som vänder) | 5 500 | 12 000 | 40 000 |
+| Tungan vapen (minigun, multiplikator) | 10 000 | 25 000 | 50 000 |
+| Bonus (railgun) | 20 | 22 | 24 |
+
+- **Belöning:** alla brons ger 10 % rabatt i Ammu-Nation.
+
+## Vad det betyder för vår bana
+
+- De befintliga banorna är **inomhus**. Projektägaren vill ha en **utomhusbana med
+  personal**. Två etapper föreslås, för att första versionen ska bli klar:
+  1. **Etapp 1 — personal på en befintlig bana.** Skjutledare och lageransvarig som
+     AI-NPC:er inne på Cypress Flats eller Pillbox Hill. Inga nya props, ingen
+     ombyggnad: bara roller, regler och samtal. Spelarens skytte sker med spelets egen
+     bana och poäng.
+  2. **Etapp 2 — utomhusbanan.** Vi placerar props i öppen värld. Där återanvänder vi
+     propmodeller från inomhusbanorna, men namn och positioner måste verifieras — aldrig
+     gissas.
+- **Poängnivåer** kan återanvändas rakt av: brons/silver/guld ovan ger en färdig skala för
+  vår egen poängräkning i etapp 2.
+- **Varningsskyltarna** blir skjutledarens röst. De är spelets egna ord, vilket gör rollen
+  trovärdig utan att vi hittar på.
+
+## Personal — projektägarens mål
+
+| Roll | Uppgift i banan |
+|---|---|
+| **Skjutledare** | Säkerhet, briefing före skytte, regler med skäl, poäng, avvisa osäkert beteende |
+| **Lageransvarig** | Vapenförråd, utlämning och inlämning, ammunition, inventarie |
+
+## Öppna frågor som ägaren beslutar
+
+1. Vilka är de tre banorna du menar, och är det samma två som wikin listar plus en?
+2. Ska etapp 1 köras på en befintlig bana, eller vill du hoppa direkt till utomhusbanan?
+3. Aktiviteter: fri skjutning, tidsutmaning, säkerhetskurs, eller allt tre?
+4. Ska lageransvarig faktiskt låna ut och ta emot vapen (ett riktigt inventarie), eller bara
+   samtala om det?
+5. Ska skjutledaren kunna stoppa spelaren vid osäker hantering — och i så fall hur?
+6. Inträdesavgift som i spelet ($14), eller gratis?
+7. Får spelaren skjuta med vilka vapen som helst, eller bara de som banan tillhandahåller?
+
+## Arbetsfördelning
+
+| Vem | Bidrar med |
+|---|---|
+| Projektägaren | Upplevelsen: vilka aktiviteter, vilka personer, vilka regler som känns rätt, samt positioner och verifiering i spelet |
+| Agenten | Verifierbara fakta (wiki, `PedHash`/`ObjectHash`-enumen, API-dumpen), rollfiler, kod, tester och dokumentation |
+
+## Status
+
+**Planerad, inte påbörjad.** Ingen kod, inga koordinater och inga propnamn skrivs förrän
+projektägaren sagt till.
