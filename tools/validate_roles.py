@@ -1,551 +1,355 @@
 #!/usr/bin/env python3
 """
-validate_roles.py — Locked role-file grammar validator
+validate_roles.py - role-file validator, grammar v1.1
 
 Usage:
     python3 tools/validate_roles.py <path> [<path> ...]
     python3 tools/validate_roles.py --self-test
 
-The grammar enforced (identical to docs/PROFILES.md):
+Grammar (identical to docs/PROFILES.md and src/Core/RoleParser.cs):
 
-1. File is UTF-8, no BOM, max 8 KB (8192 bytes).
+1. UTF-8, no BOM, at most 64 KB.
 2. Line 1 must be exactly:  Role layer, <Display Name>:
-   where <Display Name> is 1–40 characters and contains no colon.
-   This is the FIRST physical line — no '#' comments or other content may
-   precede it.  A comment on line 1 or any content before the role-layer
-   line is a parse error.
-3. After line 1, free prose (at least one non-empty line) until the first
-   section header.  Non-empty means after stripping spaces and tabs.
-4. Lines whose first non-space character is '#' are comments and are ignored
-   everywhere FROM LINE 2 onward.  They do NOT affect the parsing of line 1
-   or the section headers.
-5. Section headers exactly "=== MODES ===" then "=== WEAPON REACTIONS ===", both
-   required, in that order.  These headers are also scanned ignoring comment
-   lines (so a comment between line 1 and the headers is OK).
-6. Inside a section, "[Label]" starts a block; body text runs to the next
-   label, the next section header or end of file.  A label with an empty body
-   is an error.
-7. MODES must contain exactly the five labels:
-       Friendly, Grumpy, Scared, Aggressive, Philosophical
-   all required, nothing else.
-8. WEAPON REACTIONS must contain exactly the three labels:
-       WeaponDrawn, WeaponAimed, WeaponFired
-   all required, nothing else.
+   name 1-40 characters, no colon, nothing before it.
+3. Free prose below line 1, at least one non-empty line.
+4. '#' comment lines are ignored from line 2 onward.
+5. Sections in this order: === MODES ===, === WEAPON REACTIONS ===, and the
+   optional === TRAITS ===.
+6. MODES: the five labels Friendly, Grumpy, Scared, Aggressive, Philosophical
+   are required; Professional is optional. Nothing else allowed.
+7. WEAPON REACTIONS: WeaponDrawn, WeaponAimed, WeaponFired, all required.
+8. TRAITS (optional) may hold [CORE], [QUIRK] and [NAMES] blocks, one item per
+   line. Block contents are lists, not prose.
+9. Placeholders: {NAME} {SPECIES} {TRAIT_1} {TRAIT_2} {TRAIT_3} {QUIRK}
+   {TIME_OF_DAY} {LIGHT} {WEATHER} {AREA}. An unknown placeholder is an error.
 
-Any deviation is a parse error.
+Warnings (the file still loads): fewer than 10 core traits, 8 quirks or
+10 names, an adjective where a behaviour belongs, and forbidden-topic words.
 
-Exit codes:
-    0 — every file parses
-    1 — at least one file fails
-    2 — usage error
-
-CLI notes:
-    * Paths may be .txt files or directories (recursively walked for *.txt).
-    * Errors are reported as "path:line: message", one per line, then a final
-      summary line.
-    * On a successful run, a short summary per file is printed: path, display
-      name, number of modes, number of reactions.
-    * --self-test runs embedded fixtures (one valid file + at least eight
-      distinct invalid cases, one per rule) and exits 0 only if every case
-      behaves as expected; it prints one line per case.
-    * In the self-test, "content before line 1" is an invalid case (comments
-      or other text on line 1 is a parse error).
-
-Constraints: English comments and messages, no API keys, no network, no
-dependencies outside the Python standard library, do not touch any other file
-(docs, role .txt files, src/, .github/). No git commands.
+Exit codes: 0 all files valid, 1 any file invalid, 2 usage error.
 """
-
-import argparse
-import sys
 import os
+import re
+import sys
 import tempfile
 
-# ---------------------------------------------------------------------------
-# Helper: walk .txt paths
-# ---------------------------------------------------------------------------
+MAX_BYTES = 64 * 1024
+MODES_REQUIRED = ["Friendly", "Grumpy", "Scared", "Aggressive", "Philosophical"]
+MODES_OPTIONAL = ["Professional"]
+REACTIONS_REQUIRED = ["WeaponDrawn", "WeaponAimed", "WeaponFired"]
+TRAIT_BLOCKS = ["CORE", "QUIRK", "NAMES"]
+PLACEHOLDERS = ["NAME", "SPECIES", "TRAIT_1", "TRAIT_2", "TRAIT_3",
+                "QUIRK", "TIME_OF_DAY", "LIGHT", "WEATHER", "AREA"]
+RECOMMENDED = {"CORE": 10, "QUIRK": 8, "NAMES": 10}
+ADJECTIVES = ["curious", "lazy", "happy", "sad", "angry", "friendly", "kind",
+              "smart", "grumpy", "playful", "shy", "brave", "timid", "proud", "warm"]
+FORBIDDEN = ["explicit sex", "sexual act", "rape", "porn", "nigger", "faggot",
+             "drug deal", "cocaine", "heroin", "meth", "murder", "torture"]
 
-def resolve_paths(args):
-    """Return sorted list of .txt file paths from the given arguments."""
-    paths = []
-    for arg in args:
-        if os.path.isdir(arg):
-            for root, _dirs, files in os.walk(arg):
-                for f in files:
-                    if f.endswith(".txt"):
-                        paths.append(os.path.join(root, f))
-        elif os.path.isfile(arg) and arg.endswith(".txt"):
-            paths.append(arg)
-    # Deduplicate while preserving order
-    seen = set()
-    uniq = []
-    for p in paths:
-        if p not in seen:
-            seen.add(p)
-            uniq.append(p)
-    return uniq
+MODES_HEADER = "=== MODES ==="
+REACTIONS_HEADER = "=== WEAPON REACTIONS ==="
+TRAITS_HEADER = "=== TRAITS ==="
 
 
-# ---------------------------------------------------------------------------
-# Grammar validation
-# ---------------------------------------------------------------------------
+def parse_blocks(lines, start, end, path, errors):
+    """Parse [Label] blocks with prose bodies."""
+    blocks = {}
+    label = None
+    body = []
+    label_line = 0
 
-MODES_EXPECTED = {"Friendly", "Grumpy", "Scared", "Aggressive", "Philosophical"}
-REACTIONS_EXPECTED = {"WeaponDrawn", "WeaponAimed", "WeaponFired"}
+    def flush():
+        nonlocal label, body
+        if label is None:
+            return
+        text = "\n".join(body).strip()
+        if not text:
+            errors.append(f"{path}:{label_line}: label '{label}' has empty body")
+        else:
+            blocks[label] = text
+        label, body = None, []
 
-MAX_BYTES = 8 * 1024  # 8 KB
+    for index in range(start, end):
+        line = lines[index]
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if stripped.startswith("[") and stripped.find("]") > 1:
+            flush()
+            close = stripped.index("]")
+            label = stripped[1:close].strip()
+            label_line = index + 1
+            rest = stripped[close + 1:].strip()
+            if rest:
+                body.append(rest)
+            continue
+        if label is not None and stripped:
+            body.append(stripped)
+    flush()
+    return blocks
 
 
-def strip_leading_ws(line):
-    """Return line with leading spaces/tabs removed."""
-    return line.lstrip(' \t')
+def parse_traits(lines, start, path, errors, warnings):
+    """Parse [CORE], [QUIRK], [NAMES] list blocks."""
+    traits = {}
+    block = None
+    items = []
+    block_line = 0
+
+    def flush():
+        nonlocal block, items
+        if block is None:
+            return
+        upper = block.upper()
+        if upper not in TRAIT_BLOCKS:
+            errors.append(f"{path}:{block_line}: unknown traits block '[{block}]'; use [CORE], [QUIRK] or [NAMES]")
+        else:
+            cleaned = [item.strip() for item in items if item.strip()]
+            traits[upper] = cleaned
+            if cleaned and len(cleaned) < RECOMMENDED[upper]:
+                warnings.append(f"{path}:{block_line}: only {len(cleaned)} {upper.lower()} items; {RECOMMENDED[upper]} recommended")
+            if upper == "CORE":
+                for item in cleaned:
+                    lower = item.lower()
+                    if any(lower == word or lower.startswith(word + " ") for word in ADJECTIVES):
+                        warnings.append(f"{path}:{block_line}: core trait '{item}' is an adjective; describe a behaviour instead")
+        block, items = None, []
+
+    for index in range(start, len(lines)):
+        stripped = lines[index].strip()
+        if stripped.startswith("#"):
+            continue
+        if stripped.startswith("[") and stripped.find("]") > 1:
+            flush()
+            close = stripped.index("]")
+            block = stripped[1:close].strip()
+            block_line = index + 1
+            continue
+        if block is not None and stripped:
+            items.append(stripped)
+    flush()
+    return traits
 
 
-def is_comment_line(line):
-    """True if the first non-space character is '#'."""
-    stripped = strip_leading_ws(line)
-    return stripped.startswith('#') if stripped else False
+def parse_file(path):
+    errors, warnings = [], []
 
-
-def parse_file(filepath):
-    """
-    Validate a single role .txt file against the locked grammar.
-
-    Returns (ok, errors, summary) where:
-      ok            — True if no parse errors
-      errors        — list of "path:line: message" strings
-      summary dict  — {display_name, modes, reactions} on success, else {}
-    """
-    errors = []
-
-    # ----- read file -----
     try:
-        with open(filepath, "rb") as f:
-            raw = f.read()
-    except OSError as e:
-        errors.append(f"{filepath}:0: cannot read file: {e}")
-        return False, errors, {}
+        raw = open(path, "rb").read()
+    except OSError as exc:
+        return False, [f"{path}:0: cannot read file: {exc}"], [], {}
 
-    # BOM check — return early if BOM present
-    if raw[:3] == b'\xef\xbb\xbf':
-        errors.append(f"{filepath}:0: UTF-8 BOM present")
-        return False, errors, {}
-    if raw[:2] == b'\xff\xfe' or raw[:2] == b'\xfe\xff':
-        errors.append(f"{filepath}:0: BOM or non-UTF-16 encoding detected")
-        return False, errors, {}
+    if raw[:3] == b"\xef\xbb\xbf":
+        return False, [f"{path}:1: UTF-8 BOM present"], [], {}
+    if len(raw) > MAX_BYTES:
+        return False, [f"{path}:0: file exceeds 64 KB limit ({len(raw)} bytes)"], [], {}
 
-    # Decode UTF-8
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
-        errors.append(f"{filepath}:0: invalid UTF-8")
-        return False, errors, {}
+        return False, [f"{path}:1: not valid UTF-8"], [], {}
 
-    # Size check
-    if len(raw) > MAX_BYTES:
-        errors.append(f"{filepath}:0: file exceeds 8 KB limit ({len(raw)} bytes)")
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
-    lines = text.splitlines()
+    match = re.match(r"^Role layer, ([^:]{1,40}):$", lines[0].strip())
+    if not match:
+        return False, [f"{path}:1: line 1 must be 'Role layer, <Display Name>:' (name 1-40 chars, no colon)"], [], {}
+    name = match.group(1).strip()
 
-    # ----- Line 1 must be exactly "Role layer, <Display Name>:" -----
-    # No comment-skipping: line 1 is the first physical line.
-    if not lines:
-        errors.append(f"{filepath}:1: file is empty; expected 'Role layer, <Name>:'")
-    else:
-        raw_line = lines[0]
-        stripped = strip_leading_ws(raw_line)
-        if not stripped.startswith("Role layer,"):
-            errors.append(f"{filepath}:1: line 1 must start with 'Role layer,': got '{stripped[:40]}'")
-        else:
-            # Extract display name between "Role layer," and ":"
-            body = stripped[len("Role layer,"):].strip()
-            colon_idx = body.find(':')
-            if colon_idx < 0:
-                errors.append(f"{filepath}:1: expected format 'Role layer, <Display Name>:'")
-            else:
-                display_name = body[:colon_idx]
-                if len(display_name) < 1 or len(display_name) > 40:
-                    errors.append(f"{filepath}:1: display name must be 1-40 characters (got {len(display_name)})")
-                elif ':' in display_name:
-                    errors.append(f"{filepath}:1: display name must not contain a colon")
-
-    # ----- find section headers: === MODES === then === WEAPON REACTIONS === -----
-    # Scan from line index 1 (second physical line), skipping comment lines.
-    start_scan = 1
-    modes_found = False
-    reactions_found = False
-    modes_section_idx = None
-    reactions_section_idx = None
-    modes_body_start = None
-    reactions_body_start = None
-
-    scan_idx = start_scan
-    while scan_idx < len(lines):
-        line = lines[scan_idx]
-        if is_comment_line(line):
-            scan_idx += 1
+    indexes = {}
+    order = []
+    for index in range(1, len(lines)):
+        stripped = lines[index].strip()
+        if not stripped or stripped.startswith("#") or not stripped.startswith("==="):
             continue
-        stripped = strip_leading_ws(line)
-        if not modes_found:
-            if stripped == "=== MODES ===":
-                modes_found = True
-                modes_section_idx = scan_idx
-                modes_body_start = scan_idx + 1
-            else:
-                scan_idx += 1
-                continue
-        elif not reactions_found:
-            if stripped == "=== WEAPON REACTIONS ===":
-                reactions_found = True
-                reactions_section_idx = scan_idx
-                reactions_body_start = scan_idx + 1
-            else:
-                scan_idx += 1
-                continue
-        else:
-            break
-        scan_idx += 1
+        if stripped not in (MODES_HEADER, REACTIONS_HEADER, TRAITS_HEADER):
+            errors.append(f"{path}:{index + 1}: unknown section header '{stripped}'")
+            continue
+        if stripped in indexes:
+            errors.append(f"{path}:{index + 1}: duplicate section header '{stripped}'")
+            continue
+        indexes[stripped] = index
+        order.append(stripped)
 
-    if not modes_found:
-        errors.append(f"{filepath}:1: missing section header '=== MODES ==='")
-    if not reactions_found:
-        errors.append(f"{filepath}:1: missing section header '=== WEAPON REACTIONS ==='")
+    expected_order = [MODES_HEADER, REACTIONS_HEADER, TRAITS_HEADER]
+    for position, header in enumerate(order):
+        if expected_order.index(header) != position:
+            errors.append(f"{path}:{indexes[header] + 1}: sections must appear in the order MODES, WEAPON REACTIONS, TRAITS")
 
-    # ----- prose is required between line 1 and the first section header -----
-    if modes_section_idx is not None:
-        prose_lines = [
-            ln for ln in lines[1:modes_section_idx]
-            if not is_comment_line(ln) and strip_leading_ws(ln).strip()
-        ]
-        if not prose_lines:
-            errors.append(
-                f"{filepath}:2: missing prose before the first section header"
-            )
+    if MODES_HEADER not in indexes:
+        errors.append(f"{path}:1: missing section header '{MODES_HEADER}'")
+    if REACTIONS_HEADER not in indexes:
+        errors.append(f"{path}:1: missing section header '{REACTIONS_HEADER}'")
 
-    # Line anchors for label-set errors, so every message carries a line number
-    modes_anchor = (modes_section_idx + 1) if modes_section_idx is not None else 1
-    reactions_anchor = (
-        (reactions_section_idx + 1) if reactions_section_idx is not None else 1
-    )
+    if MODES_HEADER in indexes:
+        prose = [ln.strip() for ln in lines[1:indexes[MODES_HEADER]]
+                 if ln.strip() and not ln.strip().startswith("#")]
+        if not prose:
+            errors.append(f"{path}:2: missing prose before the first section header")
 
-    # ----- validate MODES body -----
-    modes_found_labels = set()
+    modes = {}
+    if MODES_HEADER in indexes:
+        end = indexes.get(REACTIONS_HEADER, indexes.get(TRAITS_HEADER, len(lines)))
+        modes = parse_blocks(lines, indexes[MODES_HEADER] + 1, end, path, errors)
+        for label in modes:
+            if label not in MODES_REQUIRED + MODES_OPTIONAL:
+                errors.append(f"{path}:unknown: unknown mode label '{label}'")
+        for label in MODES_REQUIRED:
+            if label not in modes:
+                errors.append(f"{path}:unknown: missing mode label '{label}'")
 
-    if modes_section_idx is not None:
-        if reactions_section_idx is not None:
-            modes_lines = lines[modes_body_start:reactions_section_idx]
-        else:
-            modes_lines = lines[modes_body_start:]
-    else:
-        modes_lines = []
+    reactions = {}
+    if REACTIONS_HEADER in indexes:
+        end = indexes.get(TRAITS_HEADER, len(lines))
+        reactions = parse_blocks(lines, indexes[REACTIONS_HEADER] + 1, end, path, errors)
+        for label in reactions:
+            if label not in REACTIONS_REQUIRED:
+                errors.append(f"{path}:unknown: unknown reaction label '{label}'")
+        for label in REACTIONS_REQUIRED:
+            if label not in reactions:
+                errors.append(f"{path}:unknown: missing reaction label '{label}'")
 
-    # Parse labels and bodies in MODES
-    # A line matching [Label] starts a new label; text after ] on the same line
-    # is body text. Subsequent lines are body text until the next [Label] or section end.
-    current_label = None
-    current_body_parts = []
-    current_label_line = None  # 1-based line number in the file
+    traits = {}
+    if TRAITS_HEADER in indexes:
+        traits = parse_traits(lines, indexes[TRAITS_HEADER] + 1, path, errors, warnings)
 
-    start_idx = modes_body_start if modes_body_start is not None else 0
-    for li, line in enumerate(modes_lines, start=start_idx):
-        stripped = strip_leading_ws(line)
+    # placeholders: known ones only
+    texts = [ln for ln in lines[1:indexes.get(MODES_HEADER, len(lines))]]
+    texts += list(modes.values()) + list(reactions.values())
+    for text in texts:
+        for found in re.findall(r"\{([A-Za-z0-9_]+)\}", text or ""):
+            if found not in PLACEHOLDERS:
+                errors.append(f"{path}:unknown placeholder '{{{found}}}'; known placeholders are " +
+                              ", ".join("{" + p + "}" for p in PLACEHOLDERS))
 
-        # Check if this line starts a new label [Label]
-        if stripped.startswith('[') and ']' in stripped:
-            # Flush previous label
-            if current_label is not None:
-                label_text = current_label.strip()
-                body_text = '\n'.join(current_body_parts).strip()
-                if label_text in MODES_EXPECTED:
-                    modes_found_labels.add(label_text)
-                else:
-                    errors.append(f"{filepath}:{current_label_line}: unknown mode label '{label_text}'")
-                if not body_text:
-                    errors.append(f"{filepath}:{current_label_line}: label '{label_text}' has empty body")
-            # Extract label name and optional body text
-            # Find the closing ]
-            close_idx = stripped.index(']')
-            label_name = stripped[1:close_idx]
-            # Text after ] may be body text on the same line
-            rest_after = stripped[close_idx + 1:].strip()
-            current_label = label_name
-            current_label_line = li + 1  # 1-based line number in original file
-            current_body_parts = []
-            if rest_after:
-                current_body_parts.append(rest_after)
-        else:
-            # Not a label line — it's body text (if we are in a label block)
-            if current_label is not None:
-                current_body_parts.append(line)
+    # 13+ policy: warn, do not fail, because role files often forbid these words
+    lowered = " ".join(texts + [i for items in traits.values() for i in items]).lower()
+    for word in FORBIDDEN:
+        if re.search(r"(?<![a-z])" + re.escape(word) + r"(?![a-z])", lowered):
+            warnings.append(f"{path}:content: '{word}' appears in the role file; the 13+ policy should keep this out of character text")
 
-    # Flush the last label
-    if current_label is not None:
-        label_text = current_label.strip()
-        body_text = '\n'.join(current_body_parts).strip()
-        if label_text in MODES_EXPECTED:
-            modes_found_labels.add(label_text)
-        else:
-            errors.append(f"{filepath}:{current_label_line}: unknown mode label '{label_text}'")
-        if not body_text:
-            errors.append(f"{filepath}:{current_label_line}: label '{label_text}' has empty body")
-
-    # Check modes: exactly the five expected, no extra, no missing
-    modes_extra = modes_found_labels - MODES_EXPECTED
-    modes_missing = MODES_EXPECTED - modes_found_labels
-    if modes_extra:
-        for lbl in sorted(modes_extra):
-            errors.append(f"{filepath}:{modes_anchor}: extra mode label '{lbl}'")
-    if modes_missing:
-        for lbl in sorted(modes_missing):
-            errors.append(f"{filepath}:{modes_anchor}: missing mode label '{lbl}'")
-    if not modes_found_labels:
-        # Only report "no labels" if the section header was actually found
-        if modes_section_idx is not None:
-            errors.append(f"{filepath}:1: no mode labels found in '=== MODES ===' section")
-
-    # ----- validate WEAPON REACTIONS body -----
-    reactions_found_labels = set()
-
-    if reactions_section_idx is not None:
-        reactions_lines = lines[reactions_body_start:] if reactions_body_start is not None else []
-    else:
-        reactions_lines = []
-
-    current_label = None
-    current_body_parts = []
-
-    for li, line in enumerate(reactions_lines, start=(reactions_body_start if reactions_body_start is not None else 0)):
-        stripped = strip_leading_ws(line)
-
-        if stripped.startswith('[') and ']' in stripped:
-            # Flush previous label
-            if current_label is not None:
-                label_text = current_label.strip()
-                body_text = '\n'.join(current_body_parts).strip()
-                if label_text in REACTIONS_EXPECTED:
-                    reactions_found_labels.add(label_text)
-                else:
-                    errors.append(f"{filepath}:{current_label_line}: unknown reaction label '{label_text}'")
-                if not body_text:
-                    errors.append(f"{filepath}:{current_label_line}: label '{label_text}' has empty body")
-            # Extract label name and optional body text
-            close_idx = stripped.index(']')
-            label_name = stripped[1:close_idx]
-            rest_after = stripped[close_idx + 1:].strip()
-            current_label = label_name
-            current_label_line = li + 1  # 1-based
-            current_body_parts = []
-            if rest_after:
-                current_body_parts.append(rest_after)
-        else:
-            if current_label is not None:
-                current_body_parts.append(line)
-
-    # Flush last reaction label
-    if current_label is not None:
-        label_text = current_label.strip()
-        body_text = '\n'.join(current_body_parts).strip()
-        if label_text in REACTIONS_EXPECTED:
-            reactions_found_labels.add(label_text)
-        else:
-            errors.append(f"{filepath}:{current_label_line}: unknown reaction label '{label_text}'")
-        if not body_text:
-            errors.append(f"{filepath}:{current_label_line}: label '{label_text}' has empty body")
-
-    # Check reactions: exactly the three expected
-    reactions_extra = reactions_found_labels - REACTIONS_EXPECTED
-    reactions_missing = REACTIONS_EXPECTED - reactions_found_labels
-    if reactions_extra:
-        for lbl in sorted(reactions_extra):
-            errors.append(f"{filepath}:{reactions_anchor}: extra reaction label '{lbl}'")
-    if reactions_missing:
-        for lbl in sorted(reactions_missing):
-            errors.append(f"{filepath}:{reactions_anchor}: missing reaction label '{lbl}'")
-    if not reactions_found_labels:
-        if reactions_section_idx is not None:
-            errors.append(f"{filepath}:1: no reaction labels found in '=== WEAPON REACTIONS ===' section")
-
-    # ----- summary on success -----
-    ok = len(errors) == 0
-    summary = {}
-    if ok and len(lines) > 0:
-        raw_line = lines[0]
-        stripped = strip_leading_ws(raw_line)
-        body = stripped[len("Role layer,"):].strip()
-        colon_idx = body.find(':')
-        display_name = body[:colon_idx] if colon_idx >= 0 else body
-        mode_count = len(modes_found_labels) if modes_section_idx is not None else 0
-        reaction_count = len(reactions_found_labels) if reactions_section_idx is not None else 0
-        summary = {
-            "display_name": display_name,
-            "modes": mode_count,
-            "reactions": reaction_count,
-        }
-
-    return ok, errors, summary
+    ok = not errors
+    summary = {"display_name": name, "modes": len(modes), "reactions": len(reactions),
+               "core": len(traits.get("CORE", [])), "quirks": len(traits.get("QUIRK", [])),
+               "names": len(traits.get("NAMES", []))} if ok else {}
+    return ok, errors, warnings, summary
 
 
-# ---------------------------------------------------------------------------
-# Self-test fixtures
-# ---------------------------------------------------------------------------
+def resolve_paths(args):
+    found = []
+    for arg in args:
+        if os.path.isdir(arg):
+            for root, _dirs, files in os.walk(arg):
+                found += [os.path.join(root, f) for f in files if f.endswith(".txt")]
+        elif os.path.isfile(arg) and arg.endswith(".txt"):
+            found.append(arg)
+    seen, unique = set(), []
+    for path in found:
+        if path not in seen:
+            seen.add(path)
+            unique.append(path)
+    return sorted(unique)
 
-VALID_FILE = """Role layer, TestPed:
 
-This is a test role file.
-It has some free prose.
-
+VALID_FILE = """Role layer, Test Ped:
+A short line about this character.
 === MODES ===
-[Friendly] pedestrians enjoy the sunshine
-[Grumpy] no one likes the rain
-[Scared] cats run away
-[Aggressive] dogs bark at strangers
-[Philosophical] thoughts on existence
-
+[Friendly]
+A friendly line.
+[Grumpy]
+A grumpy line.
+[Scared]
+A scared line.
+[Aggressive]
+An aggressive line.
+[Philosophical]
+A thoughtful line.
+[Professional]
+A calm, factual line.
 === WEAPON REACTIONS ===
-[WeaponDrawn] player pulls gun
-[WeaponAimed] player aims down sights
-[WeaponFired] bang bang
+[WeaponDrawn]
+A drawn-weapon line.
+[WeaponAimed]
+An aimed line.
+[WeaponFired]
+A fired line.
+=== TRAITS ===
+[CORE]
+chases butterflies
+sleeps in boxes
+begs for food
+[QUIRK]
+believes the player is furniture
+[NAMES]
+Silvia
+Mrr
 """
 
 INVALID_CASES = [
-    # Rule 1: BOM present
-    ("bom.txt", b'\xef\xbb\xbfRole layer, Test:\nLine 2\n', "UTF-8 BOM present"),
-    # Rule 2: File over 8 KB
-    ("toobig.txt", ("X" * (8193)) + "\nRole layer, Test:\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "file exceeds 8 KB limit"),
-    # Rule 3: Line 1 missing/wrong format
-    ("wrong_line1.txt", "BadLine\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "line 1 does not match 'Role layer, <Name>:'"),
-    # Rule 4: Display name has colon
-    ("colon_name.txt", "Role layer, Bad:Name:\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "display name contains a colon"),
-    # Rule 5: Display name too short (0 chars)
-    ("empty_name.txt", "Role layer, :\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "display name is empty"),
-    # Rule 6: Missing MODES section
-    ("missing_modes.txt", "Role layer, TestPed:\nprose\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "missing '=== MODES ===' section"),
-    # Rule 7: Missing WEAPON REACTIONS section
-    ("missing_reactions.txt", "Role layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\ntext\n", "missing '=== WEAPON REACTIONS ===' section"),
-    # Rule 8: Wrong order (WEAPON REACTIONS before MODES)
-    ("wrong_order.txt", "Role layer, TestPed:\nprose\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n=== MODES ===\n[Friendly]\ntext\n", "sections in wrong order"),
-    # Rule 9: Unknown mode label
-    ("unknown_mode.txt", "Role layer, TestPed:\nprose\n=== MODES ===\n[UnknownMode]\ntext\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "unknown mode label"),
-    # Rule 10: Unknown reaction label
-    ("unknown_reaction.txt", "Role layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[UnknownReaction]\ntext\n", "unknown reaction label"),
-    # Rule 11: Empty body for a label
-    ("empty_body.txt", "Role layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\n", "label with empty body"),
-    # Rule 12: Duplicate mode label
-    ("dup_mode.txt", "Role layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\ntext\n[Friendly]\ntext\n[Grumpy]\ntext\n[Scared]\ntext\n[Aggressive]\ntext\n[Philosophical]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "duplicate mode label"),
-    # Rule 13: Extra mode label (more than 5)
-    ("extra_mode.txt", "Role layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\ntext\n[Grumpy]\ntext\n[Scared]\ntext\n[Aggressive]\ntext\n[Philosophical]\ntext\n[Extra]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "extra mode label"),
-    # Rule 14: Extra reaction label (more than 3)
-    ("extra_reaction.txt", "Role layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n[WeaponAimed]\ntext\n[WeaponFired]\ntext\n[Extra]\ntext\n", "extra reaction label"),
-    # Rule 15: Content before line 1 — a '#' comment on line 1
-    ("comment_on_line1.txt", "# Role layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "comment on line 1 is a parse error; role-layer line must be first physical line"),
-    # Rule 17: No prose between line 1 and the first section header
-    ("noprose.txt", "Role layer, TestPed:\n=== MODES ===\n[Friendly]\ntext\n[Grumpy]\ntext\n[Scared]\ntext\n[Aggressive]\ntext\n[Philosophical]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n[WeaponAimed]\ntext\n[WeaponFired]\ntext\n", "no prose before the first section header"),
-    # Rule 16: Content before line 1 — arbitrary text on line 1
-    ("text_before_role.txt", "Some other text\nRole layer, TestPed:\nprose\n=== MODES ===\n[Friendly]\ntext\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\ntext\n", "arbitrary text on line 1 is a parse error"),
+    ("bom.txt", "\ufeff" + VALID_FILE, "UTF-8 BOM present"),
+    ("toobig.txt", "Role layer, Test:\n" + "x" * (65 * 1024) + "\n=== MODES ===\n", "file exceeds 64 KB"),
+    ("wrong_line1.txt", "BadLine\nprose\n=== MODES ===\n", "line 1 format"),
+    ("missing_prose.txt", "Role layer, Test:\n=== MODES ===\n[Friendly]\ntext\n", "missing prose"),
+    ("wrong_order.txt", "Role layer, Test:\nprose\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\nt\n=== MODES ===\n[Friendly]\nt\n", "sections in wrong order"),
+    ("unknown_mode.txt", "Role layer, Test:\nprose\n=== MODES ===\n[Friendly]\nt\n[Grumpy]\nt\n[Scared]\nt\n[Aggressive]\nt\n[Philosophical]\nt\n[Unknown]\nt\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\nt\n[WeaponAimed]\nt\n[WeaponFired]\nt\n", "unknown mode label"),
+    ("missing_reaction.txt", "Role layer, Test:\nprose\n=== MODES ===\n[Friendly]\nt\n[Grumpy]\nt\n[Scared]\nt\n[Aggressive]\nt\n[Philosophical]\nt\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\nt\n", "missing reaction label"),
+    ("empty_body.txt", "Role layer, Test:\nprose\n=== MODES ===\n[Friendly]\n[Grumpy]\nt\n[Scared]\nt\n[Aggressive]\nt\n[Philosophical]\nt\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\nt\n[WeaponAimed]\nt\n[WeaponFired]\nt\n", "label with empty body"),
+    ("unknown_trait_block.txt", VALID_FILE.replace("[QUIRK]", "[WHATEVER]"), "unknown traits block"),
+    ("unknown_placeholder.txt", VALID_FILE.replace("A friendly line.", "Hello {PLAYER_X}."), "unknown placeholder"),
+    ("traits_first.txt", "Role layer, Test:\nprose\n=== TRAITS ===\n[CORE]\nx\n=== MODES ===\n[Friendly]\nt\n[Grumpy]\nt\n[Scared]\nt\n[Aggressive]\nt\n[Philosophical]\nt\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\nt\n[WeaponAimed]\nt\n[WeaponFired]\nt\n", "traits before modes"),
 ]
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def self_test():
-    """Run embedded fixtures and report per-case results."""
     cases = []
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, "valid.txt")
+        open(path, "w", encoding="utf-8").write(VALID_FILE)
+        ok, errors, warnings, summary = parse_file(path)
+        cases.append(("valid", "PASS" if ok and summary.get("modes") == 6 else f"FAIL: {errors}"))
 
-    # Valid file
-    import os as _os
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='wb') as f:
-            f.write(VALID_FILE.encode("utf-8"))
-            vpath = f.name
-        from validate_roles import parse_file as _pf
-        ok_v, errs_v, summ_v = _pf(vpath)
-        if ok_v and not errs_v and summ_v.get("display_name") == "TestPed" and summ_v.get("modes") == 5 and summ_v.get("reactions") == 3:
-            cases.append(("valid", "PASS"))
-        else:
-            cases.append(("valid", f"FAIL: ok={ok_v} errs={errs_v} sum={summ_v}"))
-    except Exception as e:
-        cases.append(("valid", f"FAIL: exception {e}"))
-    _os.unlink(vpath)
+        for name, content, _why in INVALID_CASES:
+            path = os.path.join(folder, name)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(content)
+            ok, errors, _warnings, _summary = parse_file(path)
+            cases.append((name, "PASS" if not ok and errors else "FAIL: expected an error"))
 
-    # Invalid cases — each must produce an error (ok=False or non-empty errs)
-    for fname, content, desc in INVALID_CASES:
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='wb') as f:
-                if isinstance(content, str):
-                    f.write(content.encode("utf-8"))
-                else:
-                    f.write(content)
-                ipath = f.name
-            from validate_roles import parse_file as _pf2
-            ok_i, errs_i, summ_i = _pf2(ipath)
-            has_error = (not ok_i) or len(errs_i) > 0
-            if has_error:
-                cases.append((fname, "PASS"))
-            else:
-                cases.append((fname, f"FAIL: expected error but ok={ok_i} errs={errs_i}"))
-        except Exception as e:
-            cases.append((fname, f"FAIL: exception {e}"))
-        finally:
-            try:
-                _os.unlink(ipath)
-            except Exception:
-                pass
+        thin = VALID_FILE.replace("[CORE]\nchases butterflies\nsleeps in boxes\nbegs for food\n", "[CORE]\ncurious\n")
+        path = os.path.join(folder, "thin.txt")
+        open(path, "w", encoding="utf-8").write(thin)
+        ok, _errors, warnings, _summary = parse_file(path)
+        adjective = any("adjective" in w for w in warnings)
+        cases.append(("thin_and_adjective_warns", "PASS" if ok and adjective else "FAIL: expected a warning"))
 
-    # Print one line per case
     for name, result in cases:
         print(f"{name}: {result}")
-
-    # Exit 0 only if all cases passed
-    all_pass = all(r == "PASS" for _, r in cases)
-    return 0 if all_pass else 1
-
-
-def validate_paths(paths):
-    """Validate a list of file paths and print results."""
-    if not paths:
-        print("Usage: python3 tools/validate_roles.py <path> [<path> ...]", file=sys.stderr)
-        return 2
-
-    exit_code = 0
-    for fp in paths:
-        ok, errors, summary = parse_file(fp)
-        if errors:
-            exit_code = 1
-            for e in errors:
-                print(e)
-        if ok and summary:
-            dsn = summary.get("display_name", "???")
-            mc = summary.get("modes", 0)
-            rc = summary.get("reactions", 0)
-            print(f"{fp}: display_name={dsn}, modes={mc}, reactions={rc}")
-
-    return exit_code
+    return 0 if all(result == "PASS" for _n, result in cases) else 1
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Validate PedAndPaw_AI role-file grammar"
-    )
-    parser.add_argument(
-        "paths",
-        nargs="*",
-        metavar="PATH",
-        help=" .txt file or directory to walk recursively for *.txt",
-    )
-    parser.add_argument(
-        "--self-test",
-        action="store_true",
-        help="Run embedded fixtures and exit 0 only if all behave as expected",
-    )
-    args = parser.parse_args()
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: python3 tools/validate_roles.py <path> [<path> ...]  |  --self-test", file=sys.stderr)
+        return 2
+    if args[0] == "--self-test":
+        return self_test()
 
-    if args.self_test:
-        sys.exit(self_test())
-
-    paths = resolve_paths(args.paths)
-    sys.exit(validate_paths(paths))
+    exit_code = 0
+    for path in resolve_paths(args):
+        ok, errors, warnings, summary = parse_file(path)
+        for warning in warnings:
+            print("warning: " + warning)
+        if not ok:
+            exit_code = 1
+            for error in errors:
+                print(error)
+            continue
+        print(f"{path}: display_name={summary['display_name']}, modes={summary['modes']}, "
+              f"reactions={summary['reactions']}, core={summary['core']}, "
+              f"quirks={summary['quirks']}, names={summary['names']}")
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

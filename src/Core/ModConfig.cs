@@ -136,7 +136,7 @@ public class ModConfig
                 string key = line.Substring(0, eqIdx).Trim();
                 string value = StripInlineComment(line.Substring(eqIdx + 1)).Trim();
 
-                string firstSection;
+                string? firstSection;
                 if (seenKeys.TryGetValue(key, out firstSection))
                 {
                     if (string.Equals(firstSection, currentSection, StringComparison.OrdinalIgnoreCase))

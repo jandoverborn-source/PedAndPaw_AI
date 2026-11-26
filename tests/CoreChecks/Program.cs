@@ -140,7 +140,7 @@ ExpectReject("missing reaction label", "Role layer, Test:\nprose\n=== MODES ===\
 ExpectReject("duplicate mode label", "Role layer, Test:\nprose\n=== MODES ===\n[Friendly] a\n[Friendly] b\n[Grumpy] b\n[Scared] c\n[Aggressive] d\n[Philosophical] e\n=== WEAPON REACTIONS ===\n[WeaponDrawn] a\n[WeaponAimed] b\n[WeaponFired] c\n");
 ExpectReject("empty body", "Role layer, Test:\nprose\n=== MODES ===\n[Friendly]\n[Grumpy] b\n[Scared] c\n[Aggressive] d\n[Philosophical] e\n=== WEAPON REACTIONS ===\n[WeaponDrawn] a\n[WeaponAimed] b\n[WeaponFired] c\n");
 ExpectReject("colon in the display name", "Role layer, Bad:Name:\nprose\n=== MODES ===\n[Friendly] a\n[Grumpy] b\n[Scared] c\n[Aggressive] d\n[Philosophical] e\n=== WEAPON REACTIONS ===\n[WeaponDrawn] a\n[WeaponAimed] b\n[WeaponFired] c\n");
-ExpectReject("a file over 8 KB", "Role layer, Test:\n" + new string('x', 8200) + "\n=== MODES ===\n[Friendly] a\n[Grumpy] b\n[Scared] c\n[Aggressive] d\n[Philosophical] e\n=== WEAPON REACTIONS ===\n[WeaponDrawn] a\n[WeaponAimed] b\n[WeaponFired] c\n");
+ExpectReject("a file over 64 KB", "Role layer, Test:\n" + new string('x', 66000) + "\n=== MODES ===\n[Friendly] a\n[Grumpy] b\n[Scared] c\n[Aggressive] d\n[Philosophical] e\n=== WEAPON REACTIONS ===\n[WeaponDrawn] a\n[WeaponAimed] b\n[WeaponFired] c\n");
 
 // 6. Prompt building follows the ini switches.
 RoleParser.TryParse(policeText, "police.txt", out var police, out _);
@@ -213,6 +213,47 @@ Check("daily budget", () =>
     AssertTrue(limiter.TryAcquire("b", t0.AddSeconds(1)), "call 2");
     AssertTrue(!limiter.TryAcquire("c", t0.AddSeconds(2)), "call 3 must be refused by the budget");
     AssertTrue(limiter.TryAcquire("c", t0.AddDays(1)), "the budget resets the next day");
+});
+
+// 7b. Grammar v1.1: traits, the optional Professional mode, placeholders and warnings.
+const string v11 = "Role layer, Test Ped:\nA short line.\n=== MODES ===\n[Friendly]\nf\n[Grumpy]\ng\n[Scared]\ns\n[Aggressive]\na\n[Philosophical]\np\n[Professional]\ncalm\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\nd\n[WeaponAimed]\nm\n[WeaponFired]\nf\n=== TRAITS ===\n[CORE]\nchases butterflies\nsleeps in boxes\nbegs for food\n[QUIRK]\nbelieves the player is furniture\n[NAMES]\nSilvia\nMrr\n";
+
+Check("v1.1 parses traits and the professional mode", () =>
+{
+    var ok = RoleParser.TryParse(v11, "v11.txt", out var role, out var errors, out _);
+    AssertTrue(ok, "errors: " + string.Join("; ", errors));
+    AssertEqual(6, role.Modes.Count, "mode count");
+    AssertTrue(role.Modes.ContainsKey("Professional"), "Professional mode");
+    AssertEqual(3, role.CoreTraits.Count, "core traits");
+    AssertEqual(1, role.Quirks.Count, "quirks");
+    AssertEqual(2, role.Names.Count, "names");
+});
+
+Check("v1.1 rejects an unknown placeholder", () =>
+{
+    var text = v11.Replace("A short line.", "Hello {PLAYER_X}.");
+    AssertTrue(!RoleParser.TryParse(text, "bad.txt", out _, out var errors), "expected an error");
+    AssertTrue(errors.Count > 0, "expected a message");
+});
+
+Check("v1.1 rejects an unknown traits block and traits before modes", () =>
+{
+    var badBlock = v11.Replace("[QUIRK]", "[WHATEVER]");
+    AssertTrue(!RoleParser.TryParse(badBlock, "bad.txt", out _, out var e1), "unknown block should fail");
+    AssertTrue(e1.Count > 0, "expected a message");
+
+    var badOrder = "Role layer, Test:\nprose\n=== TRAITS ===\n[CORE]\nx\n=== MODES ===\n[Friendly]\nt\n[Grumpy]\nt\n[Scared]\nt\n[Aggressive]\nt\n[Philosophical]\nt\n=== WEAPON REACTIONS ===\n[WeaponDrawn]\nt\n[WeaponAimed]\nt\n[WeaponFired]\nt\n";
+    AssertTrue(!RoleParser.TryParse(badOrder, "bad.txt", out _, out var e2), "traits first should fail");
+    AssertTrue(e2.Count > 0, "expected a message");
+});
+
+Check("v1.1 warns about adjectives and thin lists instead of failing", () =>
+{
+    var thin = v11.Replace("[CORE]\nchases butterflies\nsleeps in boxes\nbegs for food\n", "[CORE]\ncurious\n");
+    var ok = RoleParser.TryParse(thin, "thin.txt", out _, out var errors, out var warnings);
+    AssertTrue(ok, "thin lists must still load; errors: " + string.Join("; ", errors));
+    AssertTrue(warnings.Any(w => w.Contains("adjective")), "adjective warning expected: " + string.Join("; ", warnings));
+    AssertTrue(warnings.Any(w => w.Contains("recommended")), "thin list warning expected");
 });
 
 // 8. Ini edge cases that a code review flagged.

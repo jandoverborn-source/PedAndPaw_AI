@@ -192,3 +192,66 @@ Role layer, <Display Name>:
 ---
 
 *End of document.*
+
+---
+
+## Grammar v1.1: traits, the Professional mode and placeholders
+
+Version 1.1 keeps every v1.0 rule and adds three optional things.
+
+### 1. The TRAITS section (optional, must come last)
+
+```
+=== TRAITS ===
+[CORE]
+chases butterflies
+sleeps in boxes
+begs for food
+[QUIRK]
+believes the player is furniture
+[NAMES]
+Silvia
+Mrr
+```
+
+- `[CORE]`, `[QUIRK]` and `[NAMES]` are the only allowed blocks; one item per line.
+- The code picks 3 core traits, 0 or 1 quirk and 1 name, seeded from the ped's id, so the
+  same character behaves the same way for a whole session.
+- Fewer than 10 core traits, 8 quirks or 10 names is a **warning**, not an error: a young
+  species file is allowed to grow.
+- An adjective where a behaviour belongs ("curious") is a **warning too**; describe what
+  the character does ("chases butterflies"), because the model can play behaviour.
+
+### 2. The Professional mode (optional, human roles)
+
+`[Professional]` may be added to `=== MODES ===`, in addition to the five required modes.
+It is meant for occupations: calm, factual, one question at a time, rules stated with
+reasons, no invented authority.
+
+```
+[Professional]
+You speak calmly and factually. One question at a time. You state rules with their reason.
+```
+
+### 3. Placeholders
+
+These may appear in the prose, in modes and in reactions. Any other `{...}` is an error:
+
+| Placeholder | Comes from |
+|---|---|
+| `{NAME}`, `{SPECIES}` | the trait selection and the role |
+| `{TRAIT_1}`, `{TRAIT_2}`, `{TRAIT_3}`, `{QUIRK}` | the seeded trait selection |
+| `{TIME_OF_DAY}` | the game clock: morning, noon, afternoon, evening, night |
+| `{LIGHT}` | daylight, dusk, darkness |
+| `{WEATHER}` | clear, cloudy, rain, fog |
+| `{AREA}` | the street name from the game |
+
+The model never receives an exact clock time; it gets the bucket, so it cannot invent a
+time that contradicts the game.
+
+### What changed in the limits
+
+- Maximum file size is now **64 KB** (was 8 KB), because trait lists take space.
+- Content words that the 13+ policy forbids (sexual content, drugs, gore, slurs) produce a
+  **warning** with the file name, not a rejection: a role file often says "never describe
+  blood", and that text must stay legal.
